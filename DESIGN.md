@@ -289,7 +289,7 @@ All times are ISO 8601 UTC. Coordinates are `[lon, lat]`. Errors are `{ "error":
 |---|---|---|
 | `GET /api/health` | `200 {"ok": true}` | none |
 | `GET /api/geocode?q=dal` | `200 [{label, lon, lat}]`, up to 5, US only; `[]` for under 2 characters | 429 throttle, 502 provider |
-| `POST /api/plan` | `200 PlanResponse` | 400 validation, 422 no route, 429 throttle, 502 provider |
+| `POST /api/plan` | `200 PlanResponse` | 400 validation, 413 body over 2.5 MB, 422 no route, 429 throttle, 502 provider |
 
 Validation (400): body is a JSON object; origin and destination have a label and valid coordinates and are at least 1 mile apart; departure has a time zone and is between 1 hour ago and 12 days ahead; cargo is a whole number from 1 to 45,000 lb (80,000 lb legal gross minus the 35,000 lb tare added for routing); interval is 10, 25 or 50. Messages are user-facing, for example "Cargo weight must be between 1 and 45,000 lb."
 

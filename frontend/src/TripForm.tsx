@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import type { IntervalMi, Place, PlanRequest } from "./api";
 import { dateTimeInputValue, nextHourInputValue } from "./format";
-import PlacePicker, { leavesToSubmit } from "./PlacePicker";
+import PlacePicker, { leavesToFormButton } from "./PlacePicker";
 import {
   EARLIEST_DEPARTURE_MS,
   FIELD_INPUT_IDS,
@@ -21,6 +21,8 @@ interface TripFormProps {
   /** Interval of the trip on screen, or null before the first plan. */
   planIntervalMi: IntervalMi | null;
   onSubmit: (request: PlanRequest) => void;
+  /** Drops a replan still in flight, so the trip on screen stays. */
+  onCancel: () => void;
 }
 
 function FieldError({
@@ -44,6 +46,7 @@ export default function TripForm({
   loading,
   planIntervalMi,
   onSubmit,
+  onCancel,
 }: TripFormProps) {
   const [origin, setOrigin] = useState<Place | null>(null);
   const [destination, setDestination] = useState<Place | null>(null);
@@ -113,7 +116,12 @@ export default function TripForm({
 
   function handleInterval(next: IntervalMi) {
     setIntervalMi(next);
-    if (planIntervalMi === null || next === planIntervalMi) {
+    if (planIntervalMi === null) {
+      return;
+    }
+    if (next === planIntervalMi) {
+      // Back to the spacing on screen: a replan for another spacing must not land after it.
+      onCancel();
       return;
     }
     const nextCheck = checkForm(
@@ -185,7 +193,7 @@ export default function TripForm({
           }
           onChange={(event) => setDepartureText(event.target.value)}
           onBlur={(event) => {
-            if (!leavesToSubmit(event.relatedTarget)) {
+            if (!leavesToFormButton(event.relatedTarget)) {
               markTouched("departure");
             }
           }}
@@ -218,7 +226,7 @@ export default function TripForm({
               }
               onChange={(event) => setLoadText(event.target.value)}
               onBlur={(event) => {
-                if (!leavesToSubmit(event.relatedTarget)) {
+                if (!leavesToFormButton(event.relatedTarget)) {
                   markTouched("load");
                 }
               }}
