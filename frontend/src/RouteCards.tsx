@@ -166,11 +166,31 @@ interface RouteCardsProps {
   onSelect: (routeId: string) => void;
 }
 
+/**
+ * Routes are ranked by No Travel miles first, so if the best route has any, every
+ * route does; the same holds for Severe once No Travel is zero. Nothing is hidden:
+ * the ranking stays, the warning only says no option is clean.
+ */
+function noSafeRouteWarning(plan: PlanResponse): string | null {
+  const best = plan.routes.find((route) => route.id === plan.recommended_id);
+  if (best === undefined || plan.routes.length < 2) {
+    return null;
+  }
+  if (best.summary.miles_by_level[4] > 0) {
+    return "Every route crosses No Travel weather. Consider a later departure.";
+  }
+  if (best.summary.miles_by_level[3] > 0) {
+    return "Every route crosses Severe weather. Consider a later departure.";
+  }
+  return null;
+}
+
 export default function RouteCards({
   plan,
   selectedId,
   onSelect,
 }: RouteCardsProps) {
+  const warning = noSafeRouteWarning(plan);
   return (
     <section className="section" aria-labelledby="routes-heading">
       <div className="section-head">
@@ -180,6 +200,11 @@ export default function RouteCards({
           by risk
         </span>
       </div>
+      {warning !== null && (
+        <p className="no-safe-route" role="status" data-testid="no-safe-route">
+          {warning}
+        </p>
+      )}
       <div className="route-list">
         {plan.routes.map((route) => (
           <RouteCard
