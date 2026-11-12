@@ -29,5 +29,5 @@ Weather-aware truck routing: Django API (`backend/`) plus React + MapLibre UI (`
 - Never commit `brief/`. It holds Spotter's assignment document.
 - Never add unit tests. Coverage comes from the Playwright tests in `e2e/`, which run against fixture providers.
 - The heatmap slider must not trigger a network request, rebuild the heat GeoJSON or change the style. A move sets one feature state per heat cell and replaces the three-point truck source (see DESIGN.md 5.6). Keep it that way.
-- Never let an agent run React Doctor in parallel with builds, servers or browsers; it has used over 70 GB of memory on this machine. Run it alone with `--no-parallel`.
+- Do not run React Doctor (`react-doctor` 0.9.22) locally. Its process keeps growing after it prints results (tens of GB, even with `--no-parallel`). Check React code with `tsc` and the e2e tests.
 - Fixture data in `backend/trips/fixtures/` is recorded. Re-record it with a script; do not hand-edit coordinates.
