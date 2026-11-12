@@ -4,8 +4,8 @@ export default defineConfig({
   testDir: "tests",
   timeout: 60_000,
   fullyParallel: true,
-  // Django's runserver reset asset connections when 7 pages loaded at once
-  // (3 of 6 runs failed); 4 workers passed every run.
+  // With the default 7 workers, Django's runserver reset asset connections while
+  // pages loaded in parallel (3 of 6 runs failed); 4 workers passed every run.
   workers: 4,
   retries: 0,
   reporter: "list",

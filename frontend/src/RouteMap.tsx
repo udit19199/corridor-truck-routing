@@ -56,7 +56,7 @@ interface RouteMapProps {
   onPopup: (popup: PopupState | null) => void;
   /** The hour the slider shows. The map opens on it after a lazy load. */
   hourRef: MutableRefObject<number>;
-  /** A checkpoint focus made before the map finished loading; App clears it on a new plan. */
+  /** A checkpoint to fly to once the map loads; App clears it when the focus is dropped. */
   pendingFocusRef: MutableRefObject<PopupState | null>;
   onSelectRoute: (routeId: string) => void;
   apiRef: MutableRefObject<MapApi | null>;

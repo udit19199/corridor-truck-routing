@@ -164,7 +164,7 @@ interface ComboboxKeys {
   closeList: () => void;
   dismiss: () => void;
   stepActive: (delta: 1 | -1) => void;
-  /** False when there is nothing to choose, so Enter can submit the form. */
+  /** True when Enter was handled here: a place was chosen or a search is still pending. */
   chooseActive: () => boolean;
 }
 
@@ -321,7 +321,10 @@ export default function PlacePicker({
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     handleComboboxKey(event, listOpen, {
-      openList: () => setListOpen(true),
+      openList: () => {
+        setListOpen(true);
+        setActiveIndex(options.length > 0 ? 0 : -1);
+      },
       closeList: () => {
         setListOpen(false);
         setActiveIndex(-1);
@@ -333,11 +336,12 @@ export default function PlacePicker({
         ),
       chooseActive: () => {
         const place = activePlace(options, activeIndex);
-        if (place === null) {
-          return false;
+        if (place !== null) {
+          choose(place);
+          return true;
         }
-        choose(place);
-        return true;
+        // Enter submits only once the search has answered with nothing to choose.
+        return placeSearch.status !== "done" && placeSearch.status !== "failed";
       },
     });
   }
