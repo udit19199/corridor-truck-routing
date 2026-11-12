@@ -7,59 +7,60 @@ import {
   useRef,
   useState,
   type MutableRefObject,
+  type ReactNode,
 } from "react";
 import Map, {
   NavigationControl,
   Popup,
+  type MapLayerMouseEvent,
   type MapRef,
 } from "react-map-gl/maplibre";
 import {
+  AJAXError,
   setWorkerUrl,
   type Map as MapLibreMap,
-  type MapMouseEvent,
 } from "maplibre-gl";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import "maplibre-gl/dist/maplibre-gl.css";
-import type { Checkpoint, PlanResponse } from "./api";
+import type { Checkpoint, Level, PlanResponse } from "./api";
+import { MAP_STYLE, NORTH_AMERICA, pruneBasemap, tuneBasemap } from "./basemap";
 import {
   formatClockDetailed,
+  formatDistance,
   formatMiles,
   prefersReducedMotion,
 } from "./format";
 import { levelInfo } from "./levels";
+import type { MapApi } from "./mapHandoff";
 import {
-  MAP_STYLE,
-  NORTH_AMERICA,
   applyHour,
   applyPlanData,
   applySelection,
-  buildCheckpointData,
-  buildHeatData,
-  buildRouteData,
-  buildTruckData,
-  emptyLayers,
   fitToPlan,
   installLayers,
-  pruneBasemap,
-  readNumber,
-  readString,
-  tuneBasemap,
-  type MapApi,
-  type MapPending,
-  type PlanLayers,
 } from "./mapLayers";
+import { buildPlanLayers, NO_PLAN, type PlanLayers } from "./planGeoJson";
+import MapUnavailable from "./MapUnavailable";
 
 // MapLibre 6 resolves its worker relative to the module URL, which a bundler
 // rewrites. Vite's ?url import keeps the worker next to the app in dev and build.
 // It lives here, not in main.tsx, so maplibre stays out of the first chunk.
 setWorkerUrl(workerUrl);
 
+const INTERACTIVE_LAYERS = [
+  "cp-selected",
+  "cp-other",
+  "routes-selected",
+  "routes-base",
+];
+
 interface RouteMapProps {
   plan: PlanResponse | null;
   selectedId: string | null;
+  /** The hour the slider shows. The map opens on it after a lazy load. */
+  hourRef: MutableRefObject<number>;
   onSelectRoute: (routeId: string) => void;
   apiRef: MutableRefObject<MapApi | null>;
-  pendingRef: MutableRefObject<MapPending>;
 }
 
 interface PopupState {
@@ -67,9 +68,43 @@ interface PopupState {
   checkpoint: Checkpoint;
 }
 
+interface OpenPopup extends PopupState {
+  /** The plan the checkpoint belongs to; a new plan closes the popup. */
+  plan: PlanResponse;
+}
+
+const CONDITION_LABELS = { wind: "Wind", rain: "Rain", snow: "Snow" } as const;
+
+function ConditionRow({
+  condition,
+  level,
+  setsLevel,
+  children,
+}: {
+  condition: keyof typeof CONDITION_LABELS;
+  level: Level;
+  setsLevel: boolean;
+  children: ReactNode;
+}) {
+  const info = levelInfo(level);
+  return (
+    <div className={condition === "wind" ? "popup-wide" : undefined}>
+      <dt>{CONDITION_LABELS[condition]}</dt>
+      <dd>
+        {children}
+        <span className="popup-condition" style={{ color: info.color }}>
+          {info.name}
+          {setsLevel ? ", sets the level" : ""}
+        </span>
+      </dd>
+    </div>
+  );
+}
+
 function CheckpointPopup({ routeId, checkpoint }: PopupState) {
   const info = levelInfo(checkpoint.level);
   const weather = checkpoint.weather;
+  const warns = checkpoint.level > 0;
 
   return (
     <div className="popup">
@@ -90,25 +125,32 @@ function CheckpointPopup({ routeId, checkpoint }: PopupState) {
           <dd>{formatClockDetailed(checkpoint.eta)}</dd>
         </div>
         <div>
-          <dt>Wind</dt>
-          <dd>
-            {weather.wind_mph.toFixed(1)} mph
-            <span className="popup-sub">
-              {" "}
-              gust {weather.gust_mph.toFixed(1)}
-            </span>
-          </dd>
+          <dt>Covers</dt>
+          <dd>{formatDistance(checkpoint.covers_mi)}</dd>
         </div>
-        <div>
-          <dt>Rain</dt>
-          <dd>{weather.rain_in_hr.toFixed(2)} in/hr</dd>
-        </div>
-        <div>
-          <dt>Snow</dt>
-          <dd>{weather.snow_in_hr.toFixed(2)} in/hr</dd>
-        </div>
+        <ConditionRow
+          condition="wind"
+          level={checkpoint.levels.wind}
+          setsLevel={warns && checkpoint.levels.wind === checkpoint.level}
+        >
+          {weather.wind_mph.toFixed(1)} mph (gusts {weather.gust_mph.toFixed(1)} mph)
+        </ConditionRow>
+        <ConditionRow
+          condition="rain"
+          level={checkpoint.levels.rain}
+          setsLevel={warns && checkpoint.levels.rain === checkpoint.level}
+        >
+          {weather.rain_in_hr.toFixed(2)} in/hr
+        </ConditionRow>
+        <ConditionRow
+          condition="snow"
+          level={checkpoint.levels.snow}
+          setsLevel={warns && checkpoint.levels.snow === checkpoint.level}
+        >
+          {weather.snow_in_hr.toFixed(2)} in/hr
+        </ConditionRow>
       </dl>
-      <p className="popup-cause">{checkpoint.cause}</p>
+      {warns && <p className="popup-cause">{checkpoint.cause}</p>}
     </div>
   );
 }
@@ -116,30 +158,24 @@ function CheckpointPopup({ routeId, checkpoint }: PopupState) {
 function RouteMap({
   plan,
   selectedId,
+  hourRef,
   onSelectRoute,
   apiRef,
-  pendingRef,
 }: RouteMapProps) {
   const mapRef = useRef<MapRef | null>(null);
   const loadedRef = useRef(false);
-  const [popup, setPopup] = useState<PopupState | null>(null);
-  const [mapFailed, setMapFailed] = useState(false);
+  const [openPopup, setOpenPopup] = useState<OpenPopup | null>(null);
+  const [mapFailed, setMapFailed] = useState<"webgl" | "basemap" | null>(null);
 
-  /**
-   * The heatmap's 49-level properties are built once per plan; the hour slider
-   * only swaps the fill-colour expression that reads r{h}, never this data.
-   */
-  const layers = useMemo<PlanLayers>(() => {
-    if (plan === null) {
-      return emptyLayers();
-    }
-    return {
-      heat: buildHeatData(plan),
-      routes: buildRouteData(plan),
-      checkpoints: buildCheckpointData(plan),
-      trucks: buildTruckData(plan),
-    };
-  }, [plan]);
+  const debug =
+    import.meta.env.DEV ||
+    new URLSearchParams(window.location.search).has("debug");
+
+  /** Built once per plan: the hour rides on feature state, never on this data. */
+  const layers = useMemo<PlanLayers>(
+    () => (plan === null ? NO_PLAN : buildPlanLayers(plan)),
+    [plan],
+  );
 
   // Event handlers and effects read the latest render through these refs. A layout
   // effect writes them, so render stays pure and the writes still land before the
@@ -148,6 +184,12 @@ function RouteMap({
   const planRef = useRef<PlanResponse | null>(plan);
   const selectedRef = useRef<string | null>(selectedId);
   const onSelectRouteRef = useRef(onSelectRoute);
+  const pendingFocusRef = useRef<PopupState | null>(null);
+
+  // A fast drag can fire more input events than the map draws frames; keep only
+  // the newest hour and apply it once per frame.
+  const pendingHourRef = useRef<number | null>(null);
+  const hourFrameRef = useRef(0);
 
   useLayoutEffect(() => {
     layersRef.current = layers;
@@ -156,58 +198,92 @@ function RouteMap({
     onSelectRouteRef.current = onSelectRoute;
   });
 
-  const handleMapClick = useCallback((event: MapMouseEvent) => {
-    if (!loadedRef.current) {
-      return;
-    }
-    const map = event.target;
-    const checkpointFeature = map.queryRenderedFeatures(event.point, {
-      layers: ["cp-selected", "cp-other"],
-    })[0];
+  const applyHourNow = useCallback(
+    (map: MapLibreMap, nextHour: number) => {
+      applyHour(map, planRef.current, nextHour);
+      if (debug) {
+        window.__heatHour = nextHour;
+      }
+    },
+    [debug],
+  );
+
+  const focusOn = useCallback(
+    (map: MapLibreMap, routeId: string, checkpoint: Checkpoint) => {
+      const currentPlan = planRef.current;
+      if (currentPlan === null) {
+        return;
+      }
+      setOpenPopup({ routeId, checkpoint, plan: currentPlan });
+      // The popup opens upward. On a phone the map is only partly on screen, so
+      // keep the checkpoint low and let the popup clear the panel above it.
+      const narrow = window.matchMedia("(max-width: 900px)").matches;
+      map.flyTo({
+        center: [checkpoint.lon, checkpoint.lat],
+        zoom: Math.max(map.getZoom(), 7),
+        padding: narrow ? { top: 140, right: 0, bottom: 0, left: 0 } : undefined,
+        duration: prefersReducedMotion() ? 0 : 600,
+      });
+    },
+    [],
+  );
+
+  const handleMapClick = useCallback((event: MapLayerMouseEvent) => {
+    const features = event.features ?? [];
+
+    const checkpointFeature = features.find(
+      (feature) =>
+        feature.layer.id === "cp-selected" || feature.layer.id === "cp-other",
+    );
     if (checkpointFeature !== undefined) {
-      const routeId = readString(checkpointFeature.properties, "route");
-      const index = readNumber(checkpointFeature.properties, "index");
-      if (routeId !== null && index !== null) {
-        const route = planRef.current?.routes.find(
-          (candidate) => candidate.id === routeId,
-        );
-        const checkpoint = route?.checkpoints[index];
-        if (checkpoint !== undefined) {
-          setPopup({ routeId, checkpoint });
+      const routeId = checkpointFeature.properties?.routeId;
+      const index = checkpointFeature.properties?.checkpointIndex;
+      if (typeof routeId === "string" && typeof index === "number") {
+        const currentPlan = planRef.current;
+        const checkpoint = currentPlan?.routes
+          .find((route) => route.id === routeId)
+          ?.checkpoints[index];
+        if (checkpoint !== undefined && currentPlan !== null) {
+          setOpenPopup({ routeId, checkpoint, plan: currentPlan });
+          return;
         }
-        return;
       }
     }
 
-    const routeFeature = map.queryRenderedFeatures(event.point, {
-      layers: ["routes-selected", "routes-base"],
-    })[0];
-    if (routeFeature !== undefined) {
-      const routeId = readString(routeFeature.properties, "id");
-      if (routeId !== null) {
-        setPopup(null);
-        onSelectRouteRef.current(routeId);
-        return;
-      }
-    }
-
-    setPopup(null);
-  }, []);
-
-  const handleMouseMove = useCallback((event: MapMouseEvent) => {
-    if (!loadedRef.current) {
+    const routeFeature = features.find(
+      (feature) =>
+        feature.layer.id === "routes-selected" ||
+        feature.layer.id === "routes-base",
+    );
+    const routeId = routeFeature?.properties?.routeId;
+    if (typeof routeId === "string") {
+      setOpenPopup(null);
+      onSelectRouteRef.current(routeId);
       return;
     }
-    const map = event.target;
-    const hit = map.queryRenderedFeatures(event.point, {
-      layers: ["cp-selected", "cp-other", "routes-selected", "routes-base"],
-    });
-    map.getCanvas().style.cursor = hit.length > 0 ? "pointer" : "";
+
+    setOpenPopup(null);
   }, []);
 
-  const debug =
-    import.meta.env.DEV ||
-    new URLSearchParams(window.location.search).has("debug");
+  // `interactiveLayerIds` already fills `event.features`, so the cursor follows
+  // the layers under the pointer without a state update per mouse move.
+  const handleMouseMove = useCallback((event: MapLayerMouseEvent) => {
+    if (event.originalEvent.buttons !== 0) {
+      return; // Leave the drag cursor alone while a button is held.
+    }
+    const map = mapRef.current?.getMap();
+    if (map === undefined) {
+      return;
+    }
+    map.getCanvas().style.cursor = (event.features?.length ?? 0) > 0 ? "pointer" : "";
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    const map = mapRef.current?.getMap();
+    if (map !== undefined) {
+      map.getCanvas().style.cursor = "";
+    }
+  }, []);
 
   // Exposed when the map object exists, not when its style finishes loading, so
   // tests can inspect paint properties as soon as the first plan renders.
@@ -221,18 +297,6 @@ function RouteMap({
     [debug],
   );
 
-  const focusOn = useCallback((map: MapLibreMap, checkpoint: Checkpoint) => {
-    const route = planRef.current?.routes.find((candidate) =>
-      candidate.checkpoints.includes(checkpoint),
-    );
-    setPopup({ routeId: route?.id ?? "", checkpoint });
-    map.flyTo({
-      center: [checkpoint.lon, checkpoint.lat],
-      zoom: Math.max(map.getZoom(), 7),
-      duration: prefersReducedMotion() ? 0 : 600,
-    });
-  }, []);
-
   const handleLoad = useCallback(() => {
     const map = mapRef.current?.getMap();
     if (map === undefined) {
@@ -242,86 +306,101 @@ function RouteMap({
     pruneBasemap(map);
     tuneBasemap(map);
     installLayers(map);
-    applyPlanData(
-      map,
-      layersRef.current,
-      selectedRef.current,
-      pendingRef.current.hour,
-    );
-    applyHour(map, pendingRef.current.hour, selectedRef.current);
-    const focus = pendingRef.current.focus;
-    pendingRef.current.focus = null;
-    const focusInPlan =
-      focus !== null &&
-      planRef.current?.routes.some((route) => route.checkpoints.includes(focus)) === true;
-    if (focus !== null && focusInPlan) {
-      focusOn(map, focus);
-    } else if (planRef.current !== null) {
+    applyPlanData(map, layersRef.current);
+    applySelection(map, selectedRef.current);
+    applyHourNow(map, hourRef.current);
+    if (planRef.current !== null) {
       fitToPlan(map, planRef.current);
     }
-  }, [focusOn, pendingRef]);
+    const focus = pendingFocusRef.current;
+    pendingFocusRef.current = null;
+    if (focus !== null) {
+      focusOn(map, focus.routeId, focus.checkpoint);
+    }
+  }, [applyHourNow, focusOn, hourRef]);
 
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (map === undefined || !loadedRef.current) {
       return;
     }
-    applyPlanData(map, layers, selectedRef.current, pendingRef.current.hour);
-    // App resets the pending hour to 0 for a new plan; paint that hour so the
-    // heatmap never shows the previous plan's hour under the new data.
-    applyHour(map, pendingRef.current.hour, selectedRef.current);
-    setPopup(null);
+    if (hourFrameRef.current !== 0) {
+      window.cancelAnimationFrame(hourFrameRef.current);
+      hourFrameRef.current = 0;
+    }
+    pendingHourRef.current = null;
+    applyPlanData(map, layers);
+    applySelection(map, selectedRef.current);
+    applyHourNow(map, hourRef.current);
     if (plan !== null) {
       fitToPlan(map, plan);
     }
-  }, [layers, plan, pendingRef]);
+  }, [applyHourNow, hourRef, layers, plan]);
 
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (map === undefined || !loadedRef.current) {
       return;
     }
-    applySelection(map, selectedId, pendingRef.current.hour);
-  }, [selectedId, pendingRef]);
+    applySelection(map, selectedId);
+  }, [selectedId]);
 
   useEffect(() => {
     apiRef.current = {
       setHour(hour: number) {
-        pendingRef.current.hour = hour;
-        const map = mapRef.current?.getMap();
-        if (map !== undefined && loadedRef.current) {
-          applyHour(map, hour, selectedRef.current);
-        }
-      },
-      focusCheckpoint(checkpoint: Checkpoint) {
-        const map = mapRef.current?.getMap();
-        if (map === undefined || !loadedRef.current) {
-          pendingRef.current.focus = checkpoint;
+        pendingHourRef.current = hour;
+        if (hourFrameRef.current !== 0) {
           return;
         }
-        focusOn(map, checkpoint);
+        hourFrameRef.current = window.requestAnimationFrame(() => {
+          hourFrameRef.current = 0;
+          const nextHour = pendingHourRef.current;
+          pendingHourRef.current = null;
+          const map = mapRef.current?.getMap();
+          if (nextHour === null || map === undefined || !loadedRef.current) {
+            return;
+          }
+          applyHourNow(map, nextHour);
+        });
+      },
+      focusCheckpoint(routeId: string, checkpoint: Checkpoint) {
+        const map = mapRef.current?.getMap();
+        if (map === undefined || !loadedRef.current) {
+          pendingFocusRef.current = { routeId, checkpoint };
+          return;
+        }
+        focusOn(map, routeId, checkpoint);
       },
     };
     return () => {
       apiRef.current = null;
     };
-  }, [apiRef, pendingRef, focusOn]);
+  }, [apiRef, applyHourNow, focusOn]);
 
   useEffect(() => {
     return () => {
+      if (hourFrameRef.current !== 0) {
+        window.cancelAnimationFrame(hourFrameRef.current);
+      }
       const map = mapRef.current?.getMap();
       if (map !== undefined && window.__map === map) {
         delete window.__map;
+        delete window.__heatHour;
       }
     };
   }, []);
 
-  if (mapFailed) {
+  const popup = openPopup !== null && openPopup.plan === plan ? openPopup : null;
+
+  if (mapFailed !== null) {
     return (
-      <div className="map-loading" role="alert">
-        The map could not start in this browser. Routes and checkpoints are still listed on the
-        left.
-      </div>
+      <MapUnavailable
+        reason={
+          mapFailed === "webgl"
+            ? "WebGL is unavailable in this browser."
+            : "The basemap could not be reached."
+        }
+      />
     );
   }
 
@@ -331,13 +410,24 @@ function RouteMap({
         ref={setMapRef}
         mapStyle={MAP_STYLE}
         initialViewState={{ longitude: -96.6, latitude: 38.4, zoom: 3.6 }}
+        interactiveLayerIds={INTERACTIVE_LAYERS}
         onLoad={handleLoad}
         onClick={handleMapClick}
         onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
         onError={(event) => {
+          if (loadedRef.current) {
+            return;
+          }
           // MapLibre reports a missing WebGL context as an error event, not a throw.
-          if (!loadedRef.current && event.error?.name === "GPUInitializationError") {
-            setMapFailed(true);
+          if (event.error?.name === "GPUInitializationError") {
+            setMapFailed("webgl");
+            return;
+          }
+          // The plan layers install on style load, so a style that never arrives
+          // means a blank map with no explanation.
+          if (event.error instanceof AJAXError && event.error.url === MAP_STYLE) {
+            setMapFailed("basemap");
           }
         }}
         attributionControl={{ compact: true }}
@@ -359,7 +449,7 @@ function RouteMap({
             closeButton
             closeOnClick={false}
             maxWidth="300px"
-            onClose={() => setPopup(null)}
+            onClose={() => setOpenPopup(null)}
           >
             <CheckpointPopup
               routeId={popup.routeId}

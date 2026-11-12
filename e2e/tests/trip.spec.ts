@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
 async function pickPlace(page: Page, testId: string, typed: string, label: string) {
   await page.getByTestId(testId).fill(typed);
@@ -77,15 +77,10 @@ test("heatmap slider repaints without any network request", async ({ page }) => 
   await slider.fill("24");
   await expect(page.getByTestId("hour-label")).toContainText("+24 h");
 
-  const heatPaint = () =>
-    page.evaluate(() => {
-      type MapProbe = { getLayer(id: string): unknown; getPaintProperty(id: string, name: string): unknown };
-      const map = (window as unknown as { __map: MapProbe }).__map;
-      return map.getLayer("heat-cells")
-        ? JSON.stringify(map.getPaintProperty("heat-cells", "fill-color"))
-        : "";
-    });
-  await expect.poll(heatPaint, { message: "heatmap paint reads hour 24" }).toContain('"r24"');
+  // The map paints each cell from feature state; the debug build exposes the hour it last applied.
+  const heatHour = () =>
+    page.evaluate(() => (window as unknown as { __heatHour?: number }).__heatHour ?? -1);
+  await expect.poll(heatHour, { message: "heatmap shows hour 24" }).toBe(24);
   expect(apiCalls, "no API calls while sliding").toEqual([]);
 });
 
@@ -95,7 +90,13 @@ test("a departure in the past shows an error and keeps the form usable", async (
   await pickPlace(page, "destination-input", "Chi", "Chicago, IL");
   await page.getByTestId("departure-input").fill("2020-01-01T08:00");
   await page.getByTestId("plan-submit").click();
-  await expect(page.getByTestId("error-banner")).toContainText(/departure/i);
+  await expect(page.getByTestId("departure-input-error")).toContainText(
+    "Departure must be between 1 hour ago and 12 days from now.",
+  );
+  await expect(page.getByTestId("departure-input")).toHaveAttribute(
+    "aria-invalid",
+    "true",
+  );
   await expect(page.getByTestId("plan-submit")).toBeEnabled();
 });
 
@@ -111,4 +112,79 @@ test("the API rejects an interval outside 10, 25 and 50", async ({ request }) =>
   });
   expect(res.status()).toBe(400);
   expect((await res.json()).error).toMatch(/interval/i);
+});
+
+type ApiCheckpoint = { mile: number; lon: number; lat: number; eta: string; covers_mi: number; level: number };
+type ApiRoute = {
+  id: string;
+  distance_mi: number;
+  checkpoints: ApiCheckpoint[];
+  summary: { miles_by_level: number[] };
+};
+type ApiPlan = {
+  recommended_id: string;
+  reason: string;
+  routes: ApiRoute[];
+  heatmap: { cell_deg: number; start: string; cells: { lon: number; lat: number; levels: number[] }[] };
+};
+
+async function planViaApi(request: APIRequestContext, loadLb: number, intervalMi = 25): Promise<ApiPlan> {
+  const departure = new Date(Date.now() + 2 * 3600_000);
+  departure.setUTCMinutes(30, 0, 0); // off the hour on purpose: checkpoints and cells must still agree
+  const res = await request.post("/api/plan", {
+    data: {
+      origin: { label: "Dallas, TX", lon: -96.797, lat: 32.7767 },
+      destination: { label: "Chicago, IL", lon: -87.6298, lat: 41.8781 },
+      departure: departure.toISOString(),
+      load_lb: loadLb,
+      interval_mi: intervalMi,
+    },
+  });
+  expect(res.status()).toBe(200);
+  return res.json();
+}
+
+const SEVERE = 3;
+const HIGH = 2;
+
+test("the load rule flips exactly above 40,000 lb", async ({ request }) => {
+  const atLimit = await planViaApi(request, 40000);
+  const overLimit = await planViaApi(request, 40001);
+  const routeA = (plan: ApiPlan) => plan.routes.find((route) => route.id === "A")!;
+
+  // Route A meets 35-44 mph wind: High at 40,000 lb, Severe one pound later.
+  expect(atLimit.recommended_id).toBe("A");
+  expect(routeA(atLimit).summary.miles_by_level[SEVERE]).toBe(0);
+  expect(routeA(atLimit).summary.miles_by_level[HIGH]).toBe(50);
+
+  expect(overLimit.recommended_id).toBe("B");
+  expect(routeA(overLimit).summary.miles_by_level[SEVERE]).toBe(50);
+  expect(overLimit.reason).toBe(
+    "Route B: fewer Severe miles than Route A (0 vs 50), 11 min slower; fewer High miles than Route C (150 vs 350).",
+  );
+});
+
+test("checkpoints cover each route exactly and match the heatmap at their hour", async ({ request }) => {
+  const plan = await planViaApi(request, 20000, 25);
+  const { cell_deg: cellDeg, start, cells } = plan.heatmap;
+  const snap = (degrees: number) => (Math.round(degrees / cellDeg) * cellDeg).toFixed(4);
+  const cellAt = new Map(cells.map((cell) => [`${snap(cell.lon)},${snap(cell.lat)}`, cell.levels]));
+
+  for (const route of plan.routes) {
+    const miles = route.checkpoints.map((checkpoint) => checkpoint.mile);
+    const covered = route.checkpoints.reduce((sum, checkpoint) => sum + checkpoint.covers_mi, 0);
+    expect(Math.abs(covered - route.distance_mi), `route ${route.id} covered miles`).toBeLessThan(0.5);
+    expect(miles[0]).toBe(0);
+    expect(miles.at(-1)).toBe(route.distance_mi);
+    miles.slice(1, -1).forEach((mile, index) => expect(mile).toBe((index + 1) * 25));
+
+    for (const checkpoint of route.checkpoints) {
+      const hour = Math.floor((Date.parse(checkpoint.eta) - Date.parse(start)) / 3600_000 + 0.5);
+      const levels = cellAt.get(`${snap(checkpoint.lon)},${snap(checkpoint.lat)}`);
+      expect(levels, `cell under route ${route.id} mile ${checkpoint.mile}`).toBeDefined();
+      if (hour <= 48) {
+        expect(levels![hour], `route ${route.id} mile ${checkpoint.mile} at +${hour} h`).toBe(checkpoint.level);
+      }
+    }
+  }
 });

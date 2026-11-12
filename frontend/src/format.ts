@@ -16,7 +16,7 @@ const detailedFormatter = new Intl.DateTimeFormat("en-US", {
   timeZoneName: "short",
 });
 
-const wholeMiles = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+const whole = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 const fractionalMiles = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
 
 function formatParts(formatter: Intl.DateTimeFormat, date: Date): Map<string, string> {
@@ -41,7 +41,12 @@ export function formatClock(iso: string): string {
   return clockText(new Date(iso));
 }
 
-/** "Thu, Nov 13, 18:00 CST" — used where the date matters. */
+/** The browser's time zone abbreviation, e.g. "CST" or "PDT". */
+export function timeZoneAbbreviation(): string {
+  return formatParts(clockFormatter, new Date()).get("timeZoneName") ?? "";
+}
+
+/** "Thu, Nov 13, 18:00 CST", used where the date matters. */
 export function formatClockDetailed(iso: string): string {
   const parts = formatParts(detailedFormatter, new Date(iso));
   const weekday = parts.get("weekday") ?? "";
@@ -53,9 +58,9 @@ export function formatClockDetailed(iso: string): string {
   return `${weekday}, ${month} ${day}, ${hour}:${minute} ${zone}`.trim();
 }
 
-/** "+12 h, Thu 18:00 CST" */
-export function formatHourLabel(departureIso: string, hour: number): string {
-  const date = new Date(new Date(departureIso).getTime() + hour * 3_600_000);
+/** "+12 h, Thu 18:00 CST", where hour 0 is `heatmap.start`. */
+export function formatHourLabel(startIso: string, hour: number): string {
+  const date = new Date(new Date(startIso).getTime() + hour * 3_600_000);
   return `+${hour} h, ${clockText(date)}`;
 }
 
@@ -64,13 +69,18 @@ export function formatDuration(seconds: number): string {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   if (hours === 0) {
-    return `${minutes} m`;
+    return `${minutes} min`;
   }
-  return `${hours} h ${String(minutes).padStart(2, "0")} m`;
+  return `${hours} h ${String(minutes).padStart(2, "0")} min`;
 }
 
 export function formatDistance(miles: number): string {
-  return `${wholeMiles.format(miles)} mi`;
+  return `${whole.format(miles)} mi`;
+}
+
+/** "45,000 lb" */
+export function formatLoad(pounds: number): string {
+  return `${whole.format(pounds)} lb`;
 }
 
 export function formatMiles(miles: number): string {

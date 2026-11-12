@@ -3,6 +3,7 @@
   --bg: #080b10;
   --panel: #0f141b;
   --surface: #151c25;
+  --surface-hover: #1a2431;
   --surface-sunken: #0b1017;
   --line: #1f2833;
   --line-strong: #5b6d84;
@@ -14,6 +15,18 @@
   --accent-bright: #6aa8ff;
   --accent-soft: #16233a;
   --accent-strong: #a9c8ff;
+  --on-accent: #ffffff;
+  --selection: #1d3150;
+  --scrollbar: #2a3542;
+  --focus-halo: rgba(106, 168, 255, 0.2);
+  --danger-bg: #2a1518;
+  --danger-ink: #ffe3e1;
+  --danger-ink-2: #e7b9b6;
+  --danger-icon: #ff9b93;
+  --disabled-bg: #1b2430;
+  --disabled-ink: #6f7c8c;
+  --skeleton: #141b25;
+  --skeleton-shine: #1d2733;
   --map-bg: #0c1117;
   --shadow-dock: 0 2px 4px rgba(0, 0, 0, 0.35), 0 20px 44px -18px rgba(0, 0, 0, 0.75);
   --shadow-pop: 0 18px 40px -16px rgba(0, 0, 0, 0.8);
@@ -43,7 +56,7 @@ body {
 }
 
 ::selection {
-  background: #1d3150;
+  background: var(--selection);
   color: var(--ink);
 }
 
@@ -112,7 +125,7 @@ button {
   padding: 5px;
   border-radius: 8px;
   background: var(--accent);
-  color: #ffffff;
+  color: var(--on-accent);
 }
 
 .brand h1 {
@@ -138,7 +151,7 @@ button {
   flex-direction: column;
   gap: 18px;
   scrollbar-width: thin;
-  scrollbar-color: #2a3542 transparent;
+  scrollbar-color: var(--scrollbar) transparent;
 }
 
 .panel-scroll::-webkit-scrollbar {
@@ -146,7 +159,7 @@ button {
 }
 
 .panel-scroll::-webkit-scrollbar-thumb {
-  background: #2a3542;
+  background: var(--scrollbar);
   border: 3px solid var(--panel);
   border-radius: 99px;
 }
@@ -163,14 +176,14 @@ button {
   align-items: flex-start;
   padding: 11px 12px;
   border-radius: 11px;
-  background: #2a1518;
-  color: #ffe3e1;
+  background: var(--danger-bg);
+  color: var(--danger-ink);
 }
 
 .error-banner svg {
   flex: none;
   margin-top: 1px;
-  color: #ff9b93;
+  color: var(--danger-icon);
 }
 
 .error-banner strong {
@@ -183,7 +196,7 @@ button {
   margin: 2px 0 0;
   font-size: 12px;
   line-height: 1.45;
-  color: #e7b9b6;
+  color: var(--danger-ink-2);
 }
 
 /* ---------- Form ---------- */
@@ -218,6 +231,21 @@ button {
   color: var(--ink-3);
 }
 
+.field-error {
+  margin: 5px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--danger-icon);
+}
+
+.form-note {
+  grid-column: 1 / -1;
+  margin: -4px 0 0;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+
 .input-shell {
   position: relative;
 }
@@ -242,7 +270,11 @@ button {
 .text-input:focus {
   outline: none;
   border-color: var(--accent-bright);
-  box-shadow: 0 0 0 3px rgba(106, 168, 255, 0.2);
+  box-shadow: 0 0 0 3px var(--focus-halo);
+}
+
+.text-input[aria-invalid="true"] {
+  border-color: var(--danger-icon);
 }
 
 .text-input-suffix {
@@ -317,7 +349,7 @@ input[type="number"] {
   border: 0;
   border-radius: 9px;
   background: var(--accent);
-  color: #ffffff;
+  color: var(--on-accent);
   font-size: 13px;
   font-weight: 600;
   transition: background-color 120ms ease;
@@ -328,8 +360,8 @@ input[type="number"] {
 }
 
 .plan-button:disabled {
-  background: #1b2430;
-  color: #6f7c8c;
+  background: var(--disabled-bg);
+  color: var(--disabled-ink);
   cursor: not-allowed;
 }
 
@@ -339,7 +371,7 @@ input[type="number"] {
   flex: none;
   border-radius: 50%;
   border: 2px solid rgba(255, 255, 255, 0.35);
-  border-top-color: #ffffff;
+  border-top-color: var(--on-accent);
   animation: spin 700ms linear infinite;
 }
 
@@ -467,6 +499,12 @@ input[type="number"] {
   box-shadow: 0 0 0 1px var(--accent-bright);
 }
 
+/* A white offset outline, so a focused card cannot be read as the selected one. */
+.route-card:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
 .rc-head {
   display: flex;
   align-items: center;
@@ -491,7 +529,7 @@ input[type="number"] {
 .route-card[data-selected="true"] .rc-letter {
   border-color: var(--accent);
   background: var(--accent);
-  color: #ffffff;
+  color: var(--on-accent);
 }
 
 .rc-name {
@@ -560,6 +598,24 @@ input[type="number"] {
   height: 100%;
 }
 
+/* The ranking inputs: the miles at the levels the ranking compares first. */
+.rc-ranks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  font-size: 11px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.rc-rank {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
 .rc-foot {
   display: flex;
   align-items: center;
@@ -583,7 +639,7 @@ input[type="number"] {
   font-size: 11px;
 }
 
-.worst-dot {
+.level-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
@@ -614,8 +670,8 @@ input[type="number"] {
 
 .cp-row {
   display: grid;
-  grid-template-columns: 8px minmax(0, 1fr) auto auto;
-  align-items: center;
+  grid-template-columns: 8px minmax(0, 1fr);
+  align-items: start;
   gap: 8px;
   padding: 7px 10px;
   border: 0;
@@ -626,14 +682,44 @@ input[type="number"] {
   transition: background-color 100ms ease;
 }
 
+/* The list clips its corners, so the ring is drawn inside the row. */
+.cp-row:focus-visible {
+  outline-offset: -2px;
+  position: relative;
+  z-index: 1;
+}
+
 .cp-row:hover {
-  background: #1a2431;
+  background: var(--surface-hover);
+}
+
+.cp-row[aria-current="true"] {
+  background: var(--accent-soft);
+}
+
+.cp-row[aria-current="true"] .cp-mile {
+  color: var(--accent-strong);
 }
 
 .cp-dot {
   width: 8px;
   height: 8px;
+  margin-top: 4px;
   border-radius: 50%;
+}
+
+.cp-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.cp-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .cp-mile {
@@ -651,12 +737,20 @@ input[type="number"] {
   color: var(--ink-2);
 }
 
-.cp-level {
-  min-width: 54px;
-  text-align: right;
+.cp-detail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px 8px;
   font-size: 10.5px;
-  color: var(--ink-3);
+  line-height: 1.35;
+}
+
+.cp-level {
   white-space: nowrap;
+}
+
+.cp-cause {
+  color: var(--ink-3);
 }
 
 /* ---------- Loading and empty ---------- */
@@ -669,7 +763,12 @@ input[type="number"] {
 
 .skeleton {
   border-radius: 12px;
-  background: linear-gradient(90deg, #141b25 25%, #1d2733 37%, #141b25 63%);
+  background: linear-gradient(
+    90deg,
+    var(--skeleton) 25%,
+    var(--skeleton-shine) 37%,
+    var(--skeleton) 63%
+  );
   background-size: 400% 100%;
   animation: shimmer 1.5s ease infinite;
 }
@@ -913,7 +1012,7 @@ input[type="number"] {
   margin-top: -6px;
   border: 2px solid var(--accent-bright);
   border-radius: 50%;
-  background: #0f141b;
+  background: var(--panel);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
 }
 
@@ -928,7 +1027,7 @@ input[type="number"] {
   height: 13px;
   border: 2px solid var(--accent-bright);
   border-radius: 50%;
-  background: #0f141b;
+  background: var(--panel);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
 }
 
@@ -936,12 +1035,13 @@ input[type="number"] {
   outline: none;
 }
 
+/* A full-opacity ring on the thumb: the old 24% halo was under 2:1 against the dock. */
 .hour-range:focus-visible::-webkit-slider-thumb {
-  box-shadow: 0 0 0 4px rgba(106, 168, 255, 0.24), 0 1px 3px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 0 0 3px var(--accent-bright), 0 1px 3px rgba(0, 0, 0, 0.6);
 }
 
 .hour-range:focus-visible::-moz-range-thumb {
-  box-shadow: 0 0 0 4px rgba(106, 168, 255, 0.24), 0 1px 3px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 0 0 3px var(--accent-bright), 0 1px 3px rgba(0, 0, 0, 0.6);
 }
 
 .range-ticks {
@@ -1201,4 +1301,36 @@ input[type="number"] {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Map and app shell (batch C) */
+
+.plan-summary {
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: var(--surface-sunken);
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+
+.error-previous {
+  margin: 6px 0 0;
+  font-weight: 550;
+}
+
+.popup-condition {
+  display: block;
+  margin-top: 1px;
+  font-size: 10.5px;
+  font-weight: 550;
+}
+
+.map-unavailable {
+  max-width: 320px;
+  margin: 0;
+  padding: 0 20px;
+  text-align: center;
+  line-height: 1.55;
 }
