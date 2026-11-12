@@ -32,6 +32,7 @@ test("plans three routes and recommends exactly one, listed first", async ({ pag
   await expect(cards.first()).toHaveAttribute("data-recommended", "true");
   await expect(page.locator('[data-testid="route-card"][data-recommended="false"]')).toHaveCount(2);
   await expect(page.getByTestId("recommendation-reason")).toContainText("High");
+  await expect(page.getByTestId("no-safe-route")).toHaveCount(0);
 });
 
 test("a heavier load turns 35-44 mph wind into Severe and changes the recommendation", async ({ page }) => {
@@ -82,6 +83,21 @@ test("heatmap slider repaints without any network request", async ({ page }) => 
     page.evaluate(() => (window as unknown as { __heatHour?: number }).__heatHour ?? -1);
   await expect.poll(heatHour, { message: "heatmap shows hour 24" }).toBe(24);
   expect(apiCalls, "no API calls while sliding").toEqual([]);
+});
+
+test("warns when every route crosses No Travel weather, and still ranks them", async ({ page }) => {
+  // The fixture storm never reaches No Travel, so give every route some No Travel miles.
+  await page.route("**/api/plan", async (route) => {
+    const response = await route.fetch();
+    const plan = await response.json();
+    for (const planned of plan.routes) planned.summary.miles_by_level[4] = 12.5;
+    await route.fulfill({ response, json: plan });
+  });
+  await planTrip(page, 20000);
+  await expect(page.getByTestId("no-safe-route")).toHaveText(
+    "Every route crosses No Travel weather. Consider a later departure.",
+  );
+  await expect(page.getByTestId("route-card")).toHaveCount(3);
 });
 
 test("a departure in the past shows an error and keeps the form usable", async ({ page }) => {
