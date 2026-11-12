@@ -77,7 +77,7 @@ backend/
   config/           settings, urls, wsgi. Serves frontend/dist and /api/*.
   trips/
     domain.py       Level, Weather, Checkpoint, Route, RouteSummary, Plan dataclasses. No I/O.
-    rules.py        THRESHOLDS table, classify(weather, load_lb), summarize(route), rank(routes).
+    rules.py        THRESHOLDS table, classify(weather, load_lb), summarize(checkpoints, distance_mi), rank(routes).
     geometry.py     haversine, cumulative miles, point_and_time_at(track, mile), corridor_cells(tracks).
     providers.py    TomTom (geocode, routes), OpenMeteo (hourly), Fixture* twins; get_providers() picks by PROVIDER_MODE.
     planner.py      plan_trip(request, providers) -> Plan. The only place that calls providers.

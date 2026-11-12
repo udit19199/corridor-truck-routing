@@ -1,5 +1,6 @@
 import json
 from datetime import UTC, datetime, timedelta
+from typing import TypeIs
 
 from django.http import HttpRequest, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -59,7 +60,7 @@ def plan(request: HttpRequest) -> JsonResponse:
     return JsonResponse(_plan_json(result))
 
 
-def _parse_request(payload: dict) -> PlanRequest:
+def _parse_request(payload: dict[str, object]) -> PlanRequest:
     origin = _parse_place(payload, "origin")
     destination = _parse_place(payload, "destination")
     departure = _parse_departure(payload.get("departure"))
@@ -83,7 +84,7 @@ def _parse_request(payload: dict) -> PlanRequest:
     )
 
 
-def _parse_place(payload: dict, field: str) -> Place:
+def _parse_place(payload: dict[str, object], field: str) -> Place:
     value = payload.get(field)
     if not isinstance(value, dict):
         raise ValueError(f"{field} must be an object with label, lon and lat.")
@@ -117,18 +118,18 @@ def _parse_departure(value: object) -> datetime:
     return departure
 
 
-def _parse_int(payload: dict, field: str) -> int:
+def _parse_int(payload: dict[str, object], field: str) -> int:
     value = payload.get(field)
     if not isinstance(value, int) or isinstance(value, bool):
         raise ValueError(f"{field} must be an integer.")
     return value
 
 
-def _is_number(value: object) -> bool:
+def _is_number(value: object) -> TypeIs[int | float]:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
-def _plan_json(plan: Plan) -> dict:
+def _plan_json(plan: Plan) -> dict[str, object]:
     return {
         "departure": _iso(plan.departure),
         "load_lb": plan.load_lb,
@@ -151,7 +152,7 @@ def _plan_json(plan: Plan) -> dict:
     }
 
 
-def _route_json(route: Route) -> dict:
+def _route_json(route: Route) -> dict[str, object]:
     return {
         "id": route.id,
         "name": route.name,
@@ -168,7 +169,7 @@ def _route_json(route: Route) -> dict:
     }
 
 
-def _checkpoint_json(checkpoint: Checkpoint) -> dict:
+def _checkpoint_json(checkpoint: Checkpoint) -> dict[str, object]:
     return {
         "mile": round(checkpoint.mile, 1),
         "lon": round(checkpoint.lon, 5),
@@ -176,8 +177,8 @@ def _checkpoint_json(checkpoint: Checkpoint) -> dict:
         "eta": _iso(checkpoint.eta),
         "covers_mi": round(checkpoint.covers_mi, 1),
         "weather": {
-            "wind_mph": round(checkpoint.weather.wind_mph, 2),
-            "gust_mph": round(checkpoint.weather.gust_mph, 2),
+            "wind_mph": round(checkpoint.weather.wind_mph, 1),
+            "gust_mph": round(checkpoint.weather.gust_mph, 1),
             "rain_in_hr": round(checkpoint.weather.rain_in_hr, 2),
             "snow_in_hr": round(checkpoint.weather.snow_in_hr, 2),
         },

@@ -9,14 +9,15 @@ Weather-aware truck routing: Django API (`backend/`) plus React + MapLibre UI (`
 | Backend dev server, no keys | `cd backend && ROUTING_PROVIDER=fixture WEATHER_PROVIDER=fixture uv run python manage.py runserver 8000` |
 | Frontend dev server | `cd frontend && npm run dev` (proxies `/api` to port 8000) |
 | Fixture sanity script | `cd backend && ROUTING_PROVIDER=fixture WEATHER_PROVIDER=fixture uv run python scripts/check_fixture.py` |
+| Backend type check | `cd backend && uv run ty check trips config` |
 | End-to-end tests | `cd e2e && npm test` (builds the frontend, starts Django in fixture mode) |
 
 ## Verification by change type
 
 | Change | Run before calling it done |
 |---|---|
-| `backend/trips/rules.py`, `planner.py`, `geometry.py` | `uv run ruff check . && uv run ruff format --check .`, `scripts/check_fixture.py`, e2e tests |
-| `backend/trips/providers.py` | ruff, one live request against the real API, e2e tests |
+| `backend/trips/rules.py`, `planner.py`, `geometry.py` | `uv run ruff check . && uv run ruff format --check . && uv run ty check trips config`, `scripts/check_fixture.py`, e2e tests |
+| `backend/trips/providers.py` | ruff, ty, one live request against the real API, e2e tests |
 | `frontend/src/**` | `npx tsc --noEmit && npm run build`, e2e tests, and look at the page in a browser |
 | API contract | Update `DESIGN.md` section 3 and `frontend/src/api.ts` in the same change, then e2e tests |
 | `e2e/**` | e2e tests pass twice in a row |
