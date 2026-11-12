@@ -18,7 +18,7 @@ import CheckpointList from "./CheckpointList";
 import HourSlider from "./HourSlider";
 import { LEVELS } from "./levels";
 import RouteCards from "./RouteCards";
-import type { MapApi, MapPending } from "./RouteMap";
+import type { MapApi, MapPending } from "./mapLayers";
 import TripForm from "./TripForm";
 
 // The map pulls in MapLibre; loading it separately lets the form paint first.
@@ -173,6 +173,11 @@ export default function App() {
   const mapApiRef = useRef<MapApi | null>(null);
   const mapPendingRef = useRef<MapPending>({ hour: 0, focus: null });
 
+  // A fast drag can fire more input events than the map draws frames; keep only
+  // the newest hour and apply it once per frame.
+  const pendingHour = useRef<number | null>(null);
+  const hourFrame = useRef(0);
+
   const runPlan = useCallback(async (request: PlanRequest) => {
     const requestId = requestRef.current + 1;
     requestRef.current = requestId;
@@ -185,6 +190,14 @@ export default function App() {
         return;
       }
       planRef.current = plan;
+      // A new plan starts at hour 0. The slider remounts at 0, and the map reads
+      // this value, so drop any frame queued for the old plan first.
+      mapPendingRef.current.hour = 0;
+      if (hourFrame.current !== 0) {
+        window.cancelAnimationFrame(hourFrame.current);
+        hourFrame.current = 0;
+      }
+      pendingHour.current = null;
       setSelectedId(plan.recommended_id);
       setPlanVersion((version) => version + 1);
       setState({ status: "ready", plan });
@@ -218,11 +231,6 @@ export default function App() {
       mapApiRef.current.focusCheckpoint(checkpoint);
     }
   }, []);
-
-  // A fast drag can fire more input events than the map draws frames; keep only
-  // the newest hour and apply it once per frame.
-  const pendingHour = useRef<number | null>(null);
-  const hourFrame = useRef(0);
 
   const handleHour = useCallback((hour: number) => {
     mapPendingRef.current.hour = hour;
@@ -364,8 +372,8 @@ export default function App() {
         {plan !== null && (
           <div className="map-dock">
             <HourSlider
+              key={planVersion}
               departure={plan.departure}
-              resetKey={planVersion}
               onHour={handleHour}
             />
             <div className="dock-foot">

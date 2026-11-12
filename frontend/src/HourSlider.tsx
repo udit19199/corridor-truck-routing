@@ -1,20 +1,14 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { formatHourLabel } from "./format";
 
 interface HourSliderProps {
   departure: string;
-  resetKey: number;
   onHour: (hour: number) => void;
 }
 
-export default function HourSlider({ departure, resetKey, onHour }: HourSliderProps) {
+// App remounts this with a new key per plan, so each plan starts at hour 0.
+export default function HourSlider({ departure, onHour }: HourSliderProps) {
   const [hour, setHour] = useState(0);
-
-  // A new plan starts at its departure hour; the map controller applies hour 0.
-  useEffect(() => {
-    setHour(0);
-    onHour(0);
-  }, [resetKey, onHour]);
 
   const label = formatHourLabel(departure, hour);
   const fill = `${(hour / 48) * 100}%`;

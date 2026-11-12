@@ -8,41 +8,17 @@ type SearchState =
   | { status: "done"; options: Place[] }
   | { status: "failed"; options: Place[] };
 
-interface PlacePickerProps {
-  inputId: string;
-  testId: string;
-  label: string;
-  placeholder: string;
-  value: Place | null;
-  onChange: (place: Place | null) => void;
-}
-
-function PlacePicker({
-  inputId,
-  testId,
-  label,
-  placeholder,
-  value,
-  onChange,
-}: PlacePickerProps) {
-  const [query, setQuery] = useState(value?.label ?? "");
+/**
+ * Debounced place search plus the listbox state that follows from it. A query
+ * that matches the chosen place, or is too short, clears the list.
+ */
+function usePlaceSearch(query: string, value: Place | null) {
   const [search, setSearch] = useState<SearchState>({
     status: "idle",
     options: [],
   });
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
-  const listShown = open && (search.options.length > 0 || search.status !== "idle");
-  const statusText =
-    search.status === "searching"
-      ? "Searching"
-      : search.status === "failed"
-        ? "Place search is unavailable. Try again."
-        : search.status === "done"
-          ? search.options.length === 0
-            ? `No US place matches ${query.trim()}.`
-            : `${search.options.length} matches. Use the arrow keys to choose.`
-          : "";
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -79,19 +55,66 @@ function PlacePicker({
     };
   }, [query, value]);
 
+  function clear() {
+    setSearch({ status: "idle", options: [] });
+    setActive(-1);
+  }
+
+  return { search, open, setOpen, active, setActive, clear };
+}
+
+function searchStatusText(search: SearchState, query: string): string {
+  if (search.status === "searching") {
+    return "Searching";
+  }
+  if (search.status === "failed") {
+    return "Place search is unavailable. Try again.";
+  }
+  if (search.status !== "done") {
+    return "";
+  }
+  if (search.options.length === 0) {
+    return `No US place matches ${query.trim()}.`;
+  }
+  return `${search.options.length} matches. Use the arrow keys to choose.`;
+}
+
+interface PlacePickerProps {
+  inputId: string;
+  testId: string;
+  label: string;
+  placeholder: string;
+  value: Place | null;
+  onChange: (place: Place | null) => void;
+}
+
+function PlacePicker({
+  inputId,
+  testId,
+  label,
+  placeholder,
+  value,
+  onChange,
+}: PlacePickerProps) {
+  const [query, setQuery] = useState(value?.label ?? "");
+  const { search, open, setOpen, active, setActive, clear } = usePlaceSearch(
+    query,
+    value,
+  );
+  const listShown = open && (search.options.length > 0 || search.status !== "idle");
+  const statusText = searchStatusText(search, query);
+
   function choose(place: Place) {
     setQuery(place.label);
     onChange(place);
     setOpen(false);
-    setActive(-1);
-    setSearch({ status: "idle", options: [] });
+    clear();
   }
 
   function handleInput(next: string) {
     setQuery(next);
     // Old matches must not stay choosable while the debounced search for the new text waits.
-    setSearch({ status: "idle", options: [] });
-    setActive(-1);
+    clear();
     if (value !== null && next !== value.label) {
       onChange(null);
     }
