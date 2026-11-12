@@ -19,7 +19,7 @@ Weather-aware truck routing: Django API (`backend/`) plus React + MapLibre UI (`
 | `backend/trips/rules.py`, `planner.py`, `geometry.py` | `uv run ruff check . && uv run ruff format --check . && uv run ty check trips config`, `scripts/check_fixture.py`, e2e tests |
 | `backend/trips/providers.py` | ruff, ty, one live request against the real API, e2e tests |
 | `frontend/src/**` | `npx tsc --noEmit && npm run build`, e2e tests, and look at the page in a browser |
-| API contract | Update `DESIGN.md` section 3 and `frontend/src/api.ts` in the same change, then e2e tests |
+| API contract | Update `DESIGN.md` section 5.3 and `frontend/src/api.ts` in the same change, then e2e tests |
 | `e2e/**` | e2e tests pass twice in a row |
 
 ## Rules

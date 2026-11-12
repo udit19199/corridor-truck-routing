@@ -2,7 +2,7 @@
 
 How the app turns "Dallas to Chicago, Thursday 06:00, 45,000 lb" into three scored truck routes, a recommendation and a 48-hour corridor heatmap.
 
-Status: implemented. Every number below comes from the code or from a measurement, and estimates are marked as such.
+Status: implemented and running in fixture mode. The TomTom integration is written to TomTom's documented API but has not yet been exercised with a live key (see section 15). Every number below comes from the code or from a measurement, and estimates are marked as such.
 
 ## 1. Context
 
@@ -30,7 +30,7 @@ A dispatcher plans a truck run a few hours to a few days ahead. Weather along th
 | Functional | Risk and load rules exactly as the brief states, edges made explicit | Section 3 | `rules.py` |
 | Functional | A recommendation with a reason a dispatcher can check | One sentence naming the deciding numbers | `rules.rank` |
 | Functional | Corridor heatmap for hours 0 to 48 with a slider | 49 hours, every cell within 15 mi of any route | `planner`, `RouteMap` |
-| Latency | Server time for one plan | Fixture: 85 ms measured. Live: about 1.4 s measured once (estimate, depends on TomTom and Open-Meteo) | section 6 |
+| Latency | Server time for one plan | Fixture: 85 ms measured. Live: estimated 1 to 2 s, dominated by one TomTom call and up to 3 parallel Open-Meteo batches (Open-Meteo alone measured about 1.4 s cold for 279 cells) | section 6 |
 | Payload | Plan response, 25 mi interval, Dallas to Chicago | 216 KB raw, 52 KB gzip (10 mi: 263 / 56 KB; 50 mi: 200 / 51 KB) | GZip middleware |
 | Smoothness | Slider move with 4x CPU throttle | 0 source reloads, frame p95 32.6 ms | section 5.6 |
 | Quota | Stay inside free tiers | Open-Meteo 600 locations a minute, 10,000 a day; TomTom 2,500 requests a day | section 6 |
@@ -145,7 +145,7 @@ flowchart LR
         Form[TripForm] --> App
         App --> Cards[RouteCards and CheckpointList]
         App --> Map[RouteMap, lazy chunk]
-        Slider[HourSlider] --> Map
+        Slider[HourSlider] --> App
     end
     subgraph Render["Render: one Docker image"]
         WN[WhiteNoise static files]
@@ -193,7 +193,7 @@ frontend/src/
   mapLayers.ts         layer install, plan data, selection, hour, camera
   planGeoJson.ts       plan -> GeoJSON for heat cells, routes, checkpoints, trucks
   basemap.ts           dark OpenFreeMap style, pruned and contrast-tuned at load
-  mapHandoff.ts        MapApi and MapPending: how App talks to the lazily loaded map
+  mapHandoff.ts        MapApi: how App talks to the lazily loaded map through a ref
   MapUnavailable.tsx   the one map-failure message
   levels.ts            the only table of level names and colours
   format.ts            times in the browser's zone, durations, distances
@@ -399,7 +399,7 @@ Route names are the two roads with the most distance on the route, made distinct
 - Layers, bottom to top, all under the basemap labels: heat cells (fill), route lines (others grey, selected blue and wider), checkpoint circles coloured by level, trucks.
 - **Slider path.** GeoJSON for a plan is built once. Each heat cell has a numeric feature id, and `fill-color` reads `["feature-state", "level"]` (transparent when unset). A slider move, coalesced to one per animation frame, sets one feature state per cell and replaces the three-point truck source. It never changes the style. A data-driven paint expression (`match` on `r{h}`) was the first version; MapLibre reloads the source on every change of such a property (1 reload and 6 `sourcedata` events per move). `global-state` was tried and rejected because combined with per-cell data it still reloads. Measured with a 4x CPU throttle on 279 cells: 0 reloads per move, frame p50 30.3 ms and p95 32.6 ms (was 30.6 and 34.3), feature-state writes 0.1 ms p95.
 - Trucks show each route's position at `heatmap.start + h hours`: at the origin before departure, hidden after arrival.
-- The lazily loaded map receives input made before it finished loading (hour, focused checkpoint) through `MapPending`, and drops a focus that belongs to an older plan.
+- App keeps the current slider hour in a ref the map reads when it loads, and the map holds a checkpoint focus made before its style finished loading and applies it on load. A pending focus is dropped when a new plan arrives.
 - Level colours come from `levels.ts` only and match across map, cards, list and legend. Times show in the browser's time zone with its abbreviation.
 - Failures: a missing WebGL context, a failed map chunk or a failed basemap style all show one message, and the form and cards keep working.
 
@@ -413,7 +413,7 @@ Route names are the two roads with the most distance on the route, made distinct
 | TomTom, per day | 2,500 requests | 1 routing + about 10 search keystrokes (debounced, cached a day) | about 225 a day |
 | Render free instance | 512 MB, 0.1 CPU | about 85 ms CPU per plan in fixture mode | not the bottleneck |
 
-Open-Meteo is the binding limit by roughly 6x over TomTom. Our own throttle (6 plans a minute per client) stops one client from using a whole minute's weather budget. The weather cache holds about 14,000 entries for one Dallas to Chicago plan (279 cells x 50 hours).
+Open-Meteo is the binding limit by roughly 6x over TomTom. Our own throttle (6 plans a minute per client) bounds what one client can spend, but it does not guarantee the weather budget: three cold plans in one minute from different corridors already pass 600 locations, and the third then fails with the provider's rate-limit message. Repeat and nearby plans are served from the cache. Section 14 covers the fix at scale. The weather cache holds about 14,000 entries for one Dallas to Chicago plan (279 cells x 50 hours).
 
 ## 7. Failure modes
 
