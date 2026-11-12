@@ -1,15 +1,15 @@
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from trips.domain import (
     Checkpoint,
     Heatmap,
     HeatmapCell,
-    Level,
     Place,
     Plan,
     Route,
-    RouteSummary,
+    RouteOption,
+    TrackPoint,
     Weather,
 )
 from trips.geometry import CELL_DEG, cell_of, corridor_cells, cumulative_miles, point_and_time_at
@@ -26,6 +26,16 @@ class PlanRequest:
     departure: datetime
     load_lb: int
     interval_mi: int
+
+
+@dataclass(frozen=True)
+class _PreparedRoute:
+    route_id: str
+    option: RouteOption
+    total_mi: float
+    miles: list[float]
+    covers: list[float]
+    points: list[TrackPoint]
 
 
 def plan_trip(request: PlanRequest, providers: Providers) -> Plan:
@@ -49,18 +59,29 @@ def plan_trip(request: PlanRequest, providers: Providers) -> Plan:
         miles = _checkpoint_miles(total_mi, request.interval_mi)
         covers = covered_miles(miles, total_mi)
         points = [point_and_time_at(option.track, cumulative, mile) for mile in miles]
-        prepared.append(("ABC"[index], option, total_mi, miles, covers, points))
+        prepared.append(
+            _PreparedRoute(
+                route_id="ABC"[index],
+                option=option,
+                total_mi=total_mi,
+                miles=miles,
+                covers=covers,
+                points=points,
+            )
+        )
 
     cells = set(corridor_cells([option.track for option in options]))
-    for _route_id, _option, _total, _miles, _covers, points in prepared:
-        cells.update(cell_of(lon, lat) for lon, lat, _seconds in points)
+    for item in prepared:
+        cells.update(cell_of(lon, lat) for lon, lat, _seconds in item.points)
     cells = sorted(cells, key=lambda cell: (cell[1], cell[0]))
     series = providers.hourly(cells, start_hour, end)
 
-    routes = []
-    for route_id, option, total_mi, miles, covers, points in prepared:
-        checkpoints = []
-        for mile, covers_mi, (lon, lat, seconds) in zip(miles, covers, points, strict=True):
+    routes: list[Route] = []
+    for item in prepared:
+        checkpoints: list[Checkpoint] = []
+        for mile, covers_mi, (lon, lat, seconds) in zip(
+            item.miles, item.covers, item.points, strict=True
+        ):
             eta = request.departure + timedelta(seconds=seconds)
             weather = _weather_at(series[cell_of(lon, lat)], start_hour, eta)
             levels, level, cause = classify(weather, request.load_lb)
@@ -77,17 +98,18 @@ def plan_trip(request: PlanRequest, providers: Providers) -> Plan:
                     cause=cause,
                 )
             )
-        route = Route(
-            id=route_id,
-            name=option.name,
-            distance_mi=total_mi,
-            duration_s=option.duration_s,
-            arrival=request.departure + timedelta(seconds=option.duration_s),
-            track=option.track,
-            checkpoints=checkpoints,
-            summary=RouteSummary((0.0, 0.0, 0.0, 0.0, 0.0), 0.0, Level.LOW),
+        routes.append(
+            Route(
+                id=item.route_id,
+                name=item.option.name,
+                distance_mi=item.total_mi,
+                duration_s=item.option.duration_s,
+                arrival=request.departure + timedelta(seconds=item.option.duration_s),
+                track=item.option.track,
+                checkpoints=checkpoints,
+                summary=summarize(checkpoints, item.total_mi),
+            )
         )
-        routes.append(replace(route, summary=summarize(route)))
 
     heatmap_cells = []
     for cell in cells:

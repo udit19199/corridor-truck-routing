@@ -1,11 +1,11 @@
 from bisect import bisect_right
 from math import asin, ceil, cos, radians, sin, sqrt
 
+from trips.domain import Cell, TrackPoint
+
 EARTH_RADIUS_MI = 3958.7613
 CELL_DEG = 0.25
 CORRIDOR_RADIUS_MI = 15.0
-
-Point = tuple[float, float, int]
 
 
 def haversine(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
@@ -16,7 +16,7 @@ def haversine(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
     return 2 * EARTH_RADIUS_MI * asin(sqrt(a))
 
 
-def cumulative_miles(track: list[Point]) -> list[float]:
+def cumulative_miles(track: list[TrackPoint]) -> list[float]:
     cumulative = [0.0]
     for previous, current in zip(track, track[1:], strict=False):
         cumulative.append(
@@ -25,7 +25,7 @@ def cumulative_miles(track: list[Point]) -> list[float]:
     return cumulative
 
 
-def point_and_time_at(track: list[Point], cumulative: list[float], mile: float) -> Point:
+def point_and_time_at(track: list[TrackPoint], cumulative: list[float], mile: float) -> TrackPoint:
     if mile <= 0:
         return track[0]
     if mile >= cumulative[-1]:
@@ -41,11 +41,11 @@ def point_and_time_at(track: list[Point], cumulative: list[float], mile: float) 
     return (lon, lat, seconds)
 
 
-def cell_of(lon: float, lat: float) -> tuple[float, float]:
+def cell_of(lon: float, lat: float) -> Cell:
     return (round(lon / CELL_DEG) * CELL_DEG, round(lat / CELL_DEG) * CELL_DEG)
 
 
-def _cells_within(lon: float, lat: float) -> set[tuple[float, float]]:
+def _cells_within(lon: float, lat: float) -> set[Cell]:
     cells = set()
     centre_lon, centre_lat = round(lon / CELL_DEG), round(lat / CELL_DEG)
     for offset_lon in range(-1, 2):
@@ -57,9 +57,9 @@ def _cells_within(lon: float, lat: float) -> set[tuple[float, float]]:
     return cells
 
 
-def corridor_cells(tracks: list[list[Point]]) -> list[tuple[float, float]]:
+def corridor_cells(tracks: list[list[TrackPoint]]) -> list[Cell]:
     """Grid cells whose centres lie within CORRIDOR_RADIUS_MI of any track."""
-    cells: set[tuple[float, float]] = set()
+    cells: set[Cell] = set()
     for track in tracks:
         cells |= _cells_within(track[0][0], track[0][1])
         for start, end in zip(track, track[1:], strict=False):

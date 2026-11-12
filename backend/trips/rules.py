@@ -1,4 +1,12 @@
-from trips.domain import Level, Levels, Route, RouteSummary, Weather
+from trips.domain import (
+    Checkpoint,
+    Level,
+    Levels,
+    MilesByLevel,
+    Route,
+    RouteSummary,
+    Weather,
+)
 
 # Rows are (lower bound, level). A value equal to a bound takes the higher band.
 WIND_BANDS = (
@@ -83,16 +91,23 @@ def covered_miles(miles: list[float], total_mi: float) -> list[float]:
     return covers
 
 
-def summarize(route: Route) -> RouteSummary:
+def summarize(checkpoints: list[Checkpoint], distance_mi: float) -> RouteSummary:
     by_level = [0.0] * 5
     score = 0.0
-    for checkpoint in route.checkpoints:
+    for checkpoint in checkpoints:
         by_level[checkpoint.level] += checkpoint.covers_mi
         score += int(checkpoint.level) * checkpoint.covers_mi
-    worst = max(checkpoint.level for checkpoint in route.checkpoints)
+    worst = max(checkpoint.level for checkpoint in checkpoints)
+    miles_by_level: MilesByLevel = (
+        round(by_level[Level.LOW], 1),
+        round(by_level[Level.MODERATE], 1),
+        round(by_level[Level.HIGH], 1),
+        round(by_level[Level.SEVERE], 1),
+        round(by_level[Level.NO_TRAVEL], 1),
+    )
     return RouteSummary(
-        miles_by_level=tuple(round(miles, 1) for miles in by_level),
-        avg_risk=round(score / route.distance_mi, 2),
+        miles_by_level=miles_by_level,
+        avg_risk=round(score / distance_mi, 2),
         worst=worst,
     )
 

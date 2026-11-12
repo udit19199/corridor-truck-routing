@@ -16,8 +16,11 @@ import requests
 from django.conf import settings
 from django.core.cache import cache as weather_cache
 
-from trips.domain import Place, RouteOption, Weather
+from trips.domain import Cell, Place, RouteOption, TrackPoint, Weather
 from trips.geometry import haversine
+
+# Raw JSON from outside services; each use checks the shape it needs.
+Json = Any
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 TOMTOM_SEARCH_URL = "https://api.tomtom.com/search/2/search/{query}.json"
@@ -53,8 +56,8 @@ class Providers:
     geocode: Callable[[str], list[Place]]
     routes: Callable[[Place, Place, datetime, int], list[RouteOption]]
     hourly: Callable[
-        [list[tuple[float, float]], datetime, datetime],
-        dict[tuple[float, float], list[Weather]],
+        [list[Cell], datetime, datetime],
+        dict[Cell, list[Weather]],
     ]
 
 
@@ -128,9 +131,7 @@ def _fixture_weather_at(lon: float, lat: float, hour: int) -> Weather:
     return Weather(wind_mph=wind, gust_mph=wind * 1.35, rain_in_hr=rain, snow_in_hr=snow)
 
 
-def _fixture_hourly(
-    cells: list[tuple[float, float]], start: datetime, end: datetime
-) -> dict[tuple[float, float], list[Weather]]:
+def _fixture_hourly(cells: list[Cell], start: datetime, end: datetime) -> dict[Cell, list[Weather]]:
     hours = max(1, int((end - start).total_seconds() // 3600) + 1)
     return {
         cell: [_fixture_weather_at(cell[0], cell[1], hour) for hour in range(hours)]
@@ -213,16 +214,16 @@ def _tomtom_routes(
     return options
 
 
-def _route_name(route: dict) -> str:
-    numbers = []
+def _route_name(route: dict[str, Json]) -> str:
+    numbers: list[str] = []
     for instruction in (route.get("guidance") or {}).get("instructions") or []:
         numbers.extend(instruction.get("roadNumbers") or [])
     if not numbers:
-        return "Route A"
+        return "Unnamed roads"
     return ", ".join(number for number, _count in Counter(numbers).most_common(2))
 
 
-def _tomtom_track(route: dict) -> list[tuple[float, float, int]]:
+def _tomtom_track(route: dict[str, Json]) -> list[TrackPoint]:
     points: list[tuple[float, float]] = []
     for leg in route.get("legs") or []:
         for point in leg.get("points") or []:
@@ -249,7 +250,9 @@ def _tomtom_track(route: dict) -> list[tuple[float, float, int]]:
     return _thin_track(track)
 
 
-def _instruction_marks(guidance: dict, length_m: float, total_time: float) -> tuple[list, list]:
+def _instruction_marks(
+    guidance: dict[str, Json], length_m: float, total_time: float
+) -> tuple[list[float], list[float]]:
     pairs = []
     for instruction in guidance.get("instructions") or []:
         offset = instruction.get("routeOffsetInMeters")
@@ -270,7 +273,7 @@ def _instruction_marks(guidance: dict, length_m: float, total_time: float) -> tu
     return offsets, times
 
 
-def _time_at(offsets: list, times: list, distance: float) -> float:
+def _time_at(offsets: list[float], times: list[float], distance: float) -> float:
     if distance <= 0 or len(offsets) < 2:
         return times[0]
     if distance >= offsets[-1]:
@@ -285,12 +288,12 @@ def _time_at(offsets: list, times: list, distance: float) -> float:
 
 
 def _openmeteo_hourly(
-    cells: list[tuple[float, float]], start: datetime, end: datetime
-) -> dict[tuple[float, float], list[Weather]]:
+    cells: list[Cell], start: datetime, end: datetime
+) -> dict[Cell, list[Weather]]:
     start = _on_hour(start)
     hours = max(1, int((_on_hour(end) - start).total_seconds() // 3600) + 1)
 
-    series: dict[tuple[float, float], list[Weather]] = {}
+    series: dict[Cell, list[Weather]] = {}
     missing = []
     for cell in cells:
         cached = _cached_series(cell, start, hours)
@@ -307,16 +310,14 @@ def _openmeteo_hourly(
     return series
 
 
-def _cached_series(cell: tuple[float, float], start: datetime, hours: int) -> list[Weather] | None:
+def _cached_series(cell: Cell, start: datetime, hours: int) -> list[Weather] | None:
     values = [
         weather_cache.get(_cache_key(cell, start + timedelta(hours=hour))) for hour in range(hours)
     ]
     return None if any(value is None for value in values) else values
 
 
-def _fetch_openmeteo(
-    cells: list[tuple[float, float]], start: datetime, hours: int
-) -> dict[tuple[float, float], list[Weather]]:
+def _fetch_openmeteo(cells: list[Cell], start: datetime, hours: int) -> dict[Cell, list[Weather]]:
     end = start + timedelta(hours=hours - 1)
     data = _get_json(
         OPEN_METEO_URL,
@@ -370,14 +371,14 @@ def _fetch_openmeteo(
     return result
 
 
-def _cache_key(cell: tuple[float, float], when: datetime) -> str:
+def _cache_key(cell: Cell, when: datetime) -> str:
     return f"weather:{cell[0]:.2f}:{cell[1]:.2f}:{when.astimezone(UTC):%Y-%m-%dT%H}"
 
 
 # -- Shared -----------------------------------------------------------------------
 
 
-def _get_json(url: str, params: dict, service: str) -> Any:
+def _get_json(url: str, params: dict[str, str | int], service: str) -> Json:
     timeout = getattr(settings, "PROVIDER_TIMEOUT_S", 15)
     try:
         response = requests.get(url, params=params, timeout=timeout)
@@ -399,14 +400,12 @@ def _on_hour(value: datetime) -> datetime:
     return value.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
 
 
-def _chunks(items: list, size: int) -> Iterator[list]:
+def _chunks[T](items: list[T], size: int) -> Iterator[list[T]]:
     for start in range(0, len(items), size):
         yield items[start : start + size]
 
 
-def _thin_track(
-    track: list[tuple[float, float, int]],
-) -> list[tuple[float, float, int]]:
+def _thin_track(track: list[TrackPoint]) -> list[TrackPoint]:
     """Keep points at least 0.2 mi apart; the destination always stays."""
     if len(track) < 2:
         return track

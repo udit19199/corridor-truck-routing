@@ -2,6 +2,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import IntEnum
 
+# lon, lat, seconds after departure
+TrackPoint = tuple[float, float, int]
+Cell = tuple[float, float]
+# one entry per Level, in Level order
+MilesByLevel = tuple[float, float, float, float, float]
+
 
 class Level(IntEnum):
     LOW = 0
@@ -39,7 +45,7 @@ class RouteOption:
 
     name: str
     duration_s: int
-    track: list[tuple[float, float, int]]  # lon, lat, seconds after departure
+    track: list[TrackPoint]
 
 
 @dataclass(frozen=True)
@@ -57,7 +63,7 @@ class Checkpoint:
 
 @dataclass(frozen=True)
 class RouteSummary:
-    miles_by_level: tuple[float, float, float, float, float]
+    miles_by_level: MilesByLevel
     avg_risk: float
     worst: Level
 
@@ -69,7 +75,7 @@ class Route:
     distance_mi: float
     duration_s: int
     arrival: datetime
-    track: list[tuple[float, float, int]]
+    track: list[TrackPoint]
     checkpoints: list[Checkpoint]
     summary: RouteSummary
 

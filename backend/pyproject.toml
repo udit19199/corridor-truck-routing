@@ -10,7 +10,10 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["ruff"]
+dev = [
+    "ruff",
+    "ty>=0.0.101",
+]
 
 [tool.uv]
 package = false
