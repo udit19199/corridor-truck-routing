@@ -107,7 +107,62 @@ heatmap, slider: no further requests
 - **Fixture mode.** `ROUTING_PROVIDER=fixture` serves three recorded Dallas to Chicago routes, and `WEATHER_PROVIDER=fixture` serves a scripted moving storm. The e2e suite runs on both, so it is repeatable and needs no key.
 - **One deployable.** One Docker image on Render serves the built React app (WhiteNoise) and the API from one origin, so there is no CORS.
 
-Diagrams: `docs/hld.excalidraw` (components and the request path) and `docs/lld.excalidraw` (plan pipeline and data model), exported as PNG next to them.
+### 4.1 Request sequence for one plan
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant B as Browser
+    participant V as views.plan
+    participant P as planner.plan_trip
+    participant T as TomTom Routing
+    participant C as Weather cache
+    participant O as Open-Meteo
+    B->>V: POST /api/plan (places, departure, cargo, interval)
+    V->>V: throttle (6/min per client), validate
+    V->>P: PlanRequest
+    P->>T: calculateRoute, truck, gross weight, 2 alternatives
+    T-->>P: up to 3 polylines + guidance times
+    P->>P: checkpoints, ETAs, weather cells (adaptive size)
+    P->>C: cached hours for each cell
+    C-->>P: hits
+    par missing cells, 100 per request, up to 4 at once
+        P->>O: hourly forecast, start hour to end hour
+        O-->>P: wind, gusts, rain, showers, snowfall
+    end
+    P->>C: store each cell and hour for 30 min
+    P->>P: classify checkpoints, summarize, rank, 49-hour heatmap
+    P-->>V: Plan
+    V-->>B: 200 PlanResponse (about 52 KB gzip)
+    Note over B: slider moves set feature state only, no more requests
+```
+
+### 4.2 Components
+
+```mermaid
+flowchart LR
+    subgraph Browser
+        Form[TripForm] --> App
+        App --> Cards[RouteCards and CheckpointList]
+        App --> Map[RouteMap, lazy chunk]
+        Slider[HourSlider] --> Map
+    end
+    subgraph Render["Render: one Docker image"]
+        WN[WhiteNoise static files]
+        Views[views: health, geocode, plan] --> Planner[planner]
+        Planner --> Rules[rules]
+        Planner --> Geo[geometry]
+        Planner --> Prov[providers]
+        Views --> Cache[(in-process cache)]
+        Prov --> Cache
+    end
+    App -- "GET /api/geocode, POST /api/plan" --> Views
+    Browser -- "index.html, assets" --> WN
+    Prov --> TomTom[TomTom Search and Routing]
+    Prov --> OM[Open-Meteo]
+    Map --> OFM[OpenFreeMap tiles]
+    GH[GitHub Action every 10 min] -- "/api/health" --> Views
+```
 
 ## 5. Low-level design
 
@@ -146,6 +201,66 @@ e2e/                   Playwright, 8 tests against Django in fixture mode
 ```
 
 ### 5.2 Data model
+
+```mermaid
+classDiagram
+    class Plan {
+        departure
+        load_lb
+        interval_mi
+        recommended_id
+        reason
+    }
+    class Route {
+        id
+        name
+        distance_mi
+        duration_s
+        arrival
+        track
+    }
+    class RouteSummary {
+        miles_by_level[5]
+        avg_risk
+        worst
+    }
+    class Checkpoint {
+        mile
+        lon, lat
+        eta
+        covers_mi
+        level
+        cause
+    }
+    class Weather {
+        wind_mph
+        gust_mph
+        rain_in_hr
+        snow_in_hr
+    }
+    class Levels {
+        wind
+        rain
+        snow
+    }
+    class Heatmap {
+        cell_deg
+        start
+    }
+    class HeatmapCell {
+        lon, lat
+        levels[49]
+    }
+    Plan "1" *-- "1..3" Route
+    Plan "1" *-- "1" Heatmap
+    Route "1" *-- "1" RouteSummary
+    Route "1" *-- "2..*" Checkpoint
+    Checkpoint "1" *-- "1" Weather
+    Checkpoint "1" *-- "1" Levels
+    Heatmap "1" *-- "*" HeatmapCell
+```
+
+The same shape as text:
 
 ```
 Plan ── departure, load_lb, interval_mi, recommended_id, reason
