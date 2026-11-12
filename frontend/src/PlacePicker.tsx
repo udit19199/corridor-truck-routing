@@ -66,10 +66,15 @@ function usePlaceSearch(inputId: string, query: string, value: Place | null) {
     return cancelPending;
   }, [inputId, query, value]);
 
-  /** Escape dismisses the list, including an answer that has not arrived yet. */
+  /**
+   * Escape dismisses the list, including an answer that has not arrived yet. Matches
+   * already shown stay, so ArrowDown or a refocus can bring them back.
+   */
   function dismissSearch() {
     cancelPendingRef.current?.();
-    setPlaceSearch({ status: "idle" });
+    setPlaceSearch((current) =>
+      current.status === "searching" ? { status: "idle" } : current,
+    );
     setListOpen(false);
     setActiveIndex(-1);
   }
@@ -159,7 +164,8 @@ interface ComboboxKeys {
   closeList: () => void;
   dismiss: () => void;
   stepActive: (delta: 1 | -1) => void;
-  chooseActive: () => void;
+  /** False when there is nothing to choose, so Enter can submit the form. */
+  chooseActive: () => boolean;
 }
 
 function handleComboboxKey(
@@ -178,8 +184,9 @@ function handleComboboxKey(
     return;
   }
   if (key === "Enter" && listOpen) {
-    event.preventDefault();
-    keys.chooseActive();
+    if (keys.chooseActive()) {
+      event.preventDefault();
+    }
     return;
   }
   if (key === "Escape") {
@@ -326,9 +333,11 @@ export default function PlacePicker({
         ),
       chooseActive: () => {
         const place = activePlace(options, activeIndex);
-        if (place !== null) {
-          choose(place);
+        if (place === null) {
+          return false;
         }
+        choose(place);
+        return true;
       },
     });
   }

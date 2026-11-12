@@ -103,6 +103,7 @@ export default function App() {
   const { request, runPlan, cancel: cancelPlan } = usePlanRequest(handlePlan);
 
   const handleSelectRoute = useCallback((routeId: string) => {
+    pendingFocusRef.current = null;
     setShown((previous) =>
       previous === null
         ? null
@@ -111,7 +112,11 @@ export default function App() {
   }, []);
 
   const handlePopup = useCallback((focus: PopupState | null) => {
-    setShown((previous) => (previous === null ? null : { ...previous, focus }));
+    setShown((previous) =>
+      previous === null || (previous.focus === null && focus === null)
+        ? previous
+        : { ...previous, focus },
+    );
   }, []);
 
   const handleHour = useCallback((hour: number) => {
@@ -136,12 +141,14 @@ export default function App() {
         });
       }
       if (mapApiRef.current === null) {
+        // The popup and the marked row show now; the map flies there once it loads.
         pendingFocusRef.current = { routeId: selectedRoute.id, checkpoint };
+        handlePopup({ routeId: selectedRoute.id, checkpoint });
       } else {
         mapApiRef.current.focusCheckpoint(selectedRoute.id, checkpoint);
       }
     },
-    [selectedRoute],
+    [selectedRoute, handlePopup],
   );
 
   const maxHour = shown === null ? 0 : maxHeatHour(shown.plan);
