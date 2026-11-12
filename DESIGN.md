@@ -369,7 +369,7 @@ Python's `round()` rounds halves to even and would map a 12:30 departure to hour
 
 #### 5.4.4 Corridor cells and adaptive size
 
-A cell is a square of `cell_deg` degrees, identified by its centre `cell_of(lon, lat) = (round(lon / d) * d, round(lat / d) * d)`. The corridor is every cell whose centre is within 15 miles of any track point. The longitude search width scales with `1 / cos(latitude)` so no cell is missed in the north. Checkpoint cells the corridor misses are added.
+A cell is a square of `cell_deg` degrees, identified by its centre `cell_of(lon, lat) = (round(lon / d) * d, round(lat / d) * d)`. The corridor is every cell that contains a track point, plus every cell whose centre is within max(15 mi, half the cell's diagonal) of one, so coarse cells never leave part of a route uncovered. The longitude search width scales with `1 / cos(latitude)` so no cell is missed in the north. Checkpoint cells the corridor misses are added.
 
 Open-Meteo counts every location against 600 a minute, so a plan must stay well under that:
 
@@ -380,15 +380,15 @@ for d in (0.25, 0.5, 1.0):
 return 1.0, cells                                           # provider will report its limit if hit
 ```
 
-Dallas to Chicago uses 0.25° and 279 cells. A New York to Los Angeles plan with three diverging routes needs 904 cells at 0.25° and uses 0.5° with 224.
+Dallas to Chicago uses 0.25° and 279 cells. Three diverging synthetic New York to Los Angeles routes need 827 cells at 0.25° and use 0.5° with 254.
 
 ### 5.5 Providers
 
 | Call | Request | Notes |
 |---|---|---|
-| TomTom routing | `travelMode=truck`, `vehicleCommercial=true`, `vehicleWeight` = (cargo + 35,000 lb) in kg, `maxAlternatives=2`, `alternativeType=anyRoute`, `departAt` = max(departure, now + 1 min), `instructionsType=coded` | HTTP 400 means no route for this truck: `NoRouteError`, 422 |
+| TomTom routing | `travelMode=truck`, `vehicleCommercial=true`, `vehicleWeight` = (cargo + 35,000 lb) in kg, `maxAlternatives=2`, `alternativeType=anyRoute`, `departAt` = max(departure, now + 1 min), `instructionsType=coded` | a 400 whose error code means no route (`NO_ROUTE_FOUND`, `MAP_MATCHING_FAILURE`, `CANNOT_RESTORE_BASEROUTE`) is `NoRouteError`, 422; any other 400 is our own bad request, 502 |
 | TomTom search | `countrySet=US`, `typeahead=true`, `limit=5`, `idxSet=Geo,PAD` | cached 1 day per query |
-| Open-Meteo | `hourly=wind_speed_10m,wind_gusts_10m,rain,showers,snowfall`, mph and inch, GMT, `start_hour`/`end_hour`, 100 locations per request, up to 4 requests in parallel | nulls take the nearest valid hour; a series that does not cover the requested hours is an error, never padded |
+| Open-Meteo | `hourly=wind_speed_10m,wind_gusts_10m,rain,showers,snowfall`, mph and inch, GMT, `start_hour`/`end_hour`, 100 locations per request, up to 4 requests in parallel | a null takes the nearest valid hour within 3 hours, otherwise the plan fails; a series that does not cover the requested hours is an error, never padded; concurrent plans share in-flight fetches per cell |
 
 Route names are the two roads with the most distance on the route, made distinct across the three routes.
 
@@ -419,10 +419,11 @@ Open-Meteo is the binding limit by roughly 6x over TomTom. Our own throttle (6 p
 
 | Failure | Detection | Behaviour | What the user sees |
 |---|---|---|---|
-| TomTom has no route (HTTP 400) | status code | 422 | "No truck route was found between these places." |
+| TomTom has no route (HTTP 400 with a no-route code) | status and error code | 422 | "No truck route was found between these places." |
+| TomTom rejects our request (other HTTP 400) | status and error code | 502, logged | "The TomTom routing service rejected the request." |
 | TomTom or Open-Meteo down, 5xx or timeout (15 s) | exception | 502, logged with service, status, elapsed | "The ... service is unavailable right now." |
 | Provider rate limit (429) | status code | 502, logged | "The ... service is over its request limit. Try again later." |
-| Open-Meteo returns nulls | parse | nearest valid hour used; all-null series is a 502 | normal plan, or "returned incomplete data" |
+| Open-Meteo returns nulls | parse | nearest valid hour within 3 h used; a longer gap or an all-null scored series is a 502 | normal plan, or "returned incomplete data" |
 | Open-Meteo returns the wrong hours | parse | 502, nothing cached | "returned an unexpected response" |
 | Our throttle hit | cache counter | 429 with `Retry-After: 60` | "Too many requests. Wait a minute and try again." |
 | Bad input | validation | 400 | field message in the form; server message as a fallback |

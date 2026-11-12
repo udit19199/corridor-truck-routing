@@ -1,5 +1,5 @@
 from bisect import bisect_right
-from math import asin, ceil, cos, radians, sin, sqrt
+from math import asin, ceil, cos, hypot, radians, sin, sqrt
 
 from trips.domain import Cell, TrackPoint
 
@@ -65,27 +65,39 @@ def cell_of(lon: float, lat: float, cell_deg: float) -> Cell:
     return (round(lon / cell_deg) * cell_deg, round(lat / cell_deg) * cell_deg)
 
 
+def _corridor_radius_mi(lat: float, cell_deg: float) -> float:
+    """The corridor radius: 15 mi, or half a cell diagonal where the cell is wider than that."""
+    height_mi = cell_deg * MILES_PER_DEG_LAT
+    width_mi = height_mi * cos(radians(lat))
+    return max(CORRIDOR_RADIUS_MI, hypot(height_mi, width_mi) / 2)
+
+
 def _cells_near(lon: float, lat: float, cell_deg: float) -> set[Cell]:
-    """Cells whose centre lies within CORRIDOR_RADIUS_MI of the point."""
+    """Cells whose centre lies within the corridor radius of the point."""
+    radius_mi = _corridor_radius_mi(lat, cell_deg)
     centre_lon, centre_lat = round(lon / cell_deg), round(lat / cell_deg)
-    span_lat = ceil(CORRIDOR_RADIUS_MI / (cell_deg * MILES_PER_DEG_LAT))
+    span_lat = ceil(radius_mi / (cell_deg * MILES_PER_DEG_LAT))
     # A degree of longitude shrinks with the latitude, so high latitudes need more columns.
-    span_lon = ceil(CORRIDOR_RADIUS_MI / (cell_deg * MILES_PER_DEG_LAT * cos(radians(lat))))
+    span_lon = ceil(radius_mi / (cell_deg * MILES_PER_DEG_LAT * cos(radians(lat))))
     cells = set()
     for offset_lon in range(-span_lon, span_lon + 1):
         for offset_lat in range(-span_lat, span_lat + 1):
             cell_lon = (centre_lon + offset_lon) * cell_deg
             cell_lat = (centre_lat + offset_lat) * cell_deg
-            if haversine(lon, lat, cell_lon, cell_lat) <= CORRIDOR_RADIUS_MI:
+            if haversine(lon, lat, cell_lon, cell_lat) <= radius_mi:
                 cells.add((cell_lon, cell_lat))
     return cells
 
 
 def corridor_cells(tracks: list[list[TrackPoint]], cell_deg: float) -> list[Cell]:
-    """Cell centres within CORRIDOR_RADIUS_MI of any track, on a grid of this size."""
+    """Cell centres within the corridor radius of any track, on a grid of this size."""
     cells: set[Cell] = set()
     for track in tracks:
+        # The point's own cell is a corridor cell however coarse the grid:
+        # half a large cell's diagonal can be wider than the fixed radius.
+        cells.update(cell_of(lon, lat, cell_deg) for lon, lat, _seconds in track)
         cells |= _cells_near(track[0][0], track[0][1], cell_deg)
+        cells |= _cells_near(track[-1][0], track[-1][1], cell_deg)
         for start, end in zip(track, track[1:], strict=False):
             steps = max(1, ceil(haversine(start[0], start[1], end[0], end[1]) * 2))
             for step in range(steps):

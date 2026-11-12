@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 from functools import cache
 from math import cos, exp, hypot, radians
 from pathlib import Path
+from threading import Event, Lock
 from time import monotonic
 from typing import Any
 from urllib.parse import quote
@@ -32,6 +33,8 @@ TOMTOM_ROUTE_URL = "https://api.tomtom.com/routing/1/calculateRoute/{origin}:{de
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
 WEATHER_CACHE_SECONDS = 30 * 60
 OPENMETEO_FIELDS = ("wind_speed_10m", "wind_gusts_10m", "rain", "showers", "snowfall")
+# A null reading may borrow from an hour at most this far away; further out it is a real gap.
+MAX_GAP_FILL_HOURS = 3
 # TomTom wants gross vehicle weight; the form asks for cargo.
 # 35,000 lb is a typical empty tractor-trailer.
 TRUCK_TARE_LB = 35_000
@@ -181,6 +184,20 @@ def _tomtom_geocode(query: str) -> list[Place]:
     return places
 
 
+# TomTom reports a route it cannot compute as a 400. These mean the points cannot be
+# reached; any other 400 is a bad request from us.
+NO_ROUTE_CODES = frozenset({"MAP_MATCHING_FAILURE", "NO_ROUTE_FOUND", "CANNOT_RESTORE_BASEROUTE"})
+
+
+def _tomtom_says_no_route(body: Json) -> bool:
+    detail = body.get("detailedError") if isinstance(body, dict) else None
+    if not isinstance(detail, dict):
+        return False
+    code = str(detail.get("code") or "").upper()
+    message = str(detail.get("message") or "").upper()
+    return code in NO_ROUTE_CODES or "NO_ROUTE_FOUND" in message
+
+
 def _tomtom_routes(
     origin: Place, destination: Place, departure: datetime, load_lb: int
 ) -> list[RouteOption]:
@@ -202,8 +219,8 @@ def _tomtom_routes(
             "instructionsType": "coded",
         },
         "The TomTom routing service",
-        # TomTom reports points it cannot connect as a 400, not as an empty route list.
-        no_route_statuses=frozenset({400}),
+        # A 400 is either "no route for this truck" or our own bad request; the body decides.
+        no_route_400=_tomtom_says_no_route,
     )
     options = []
     if not isinstance(data, dict):
@@ -345,20 +362,61 @@ def _openmeteo_hourly(
     hours = max(1, int((_on_hour(end) - start).total_seconds() // 3600) + 1)
 
     series: dict[Cell, list[Weather]] = {}
-    missing = []
-    for cell in cells:
-        cached = _cached_series(cell, start, hours)
-        if cached is None:
-            missing.append(cell)
-        else:
-            series[cell] = cached
+    own: list[Cell] = []
+    waiting: list[tuple[Cell, Event]] = []
+    try:
+        for cell in cells:
+            cached = _cached_series(cell, start, hours)
+            if cached is not None:
+                series[cell] = cached
+                continue
+            event = _claim_fetch(cell, start, hours)
+            if event is None:
+                own.append(cell)
+            else:
+                waiting.append((cell, event))
 
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        for fetched in pool.map(
-            lambda chunk: _fetch_openmeteo(chunk, start, hours), _chunks(missing, 100)
-        ):
-            series.update(fetched)
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            for fetched in pool.map(
+                lambda chunk: _fetch_openmeteo(chunk, start, hours), _chunks(own, 100)
+            ):
+                series.update(fetched)
+    finally:
+        for cell in own:
+            _release_fetch(cell, start, hours)
+
+    # Another request was fetching these; its result is cached by now.
+    for cell, event in waiting:
+        event.wait()
+        cached = _cached_series(cell, start, hours)
+        series[cell] = (
+            cached if cached is not None else _fetch_openmeteo([cell], start, hours)[cell]
+        )
     return series
+
+
+# Cells another request is fetching right now. Threads in this process only, which matches
+# the local cache: a second plan over the same corridor waits instead of refetching it.
+_inflight_lock = Lock()
+_inflight: dict[tuple[Cell, datetime, int], Event] = {}
+
+
+def _claim_fetch(cell: Cell, start: datetime, hours: int) -> Event | None:
+    """None when this caller should do the fetch, else the event to wait on."""
+    key = (cell, start, hours)
+    with _inflight_lock:
+        event = _inflight.get(key)
+        if event is None:
+            _inflight[key] = Event()
+        return event
+
+
+def _release_fetch(cell: Cell, start: datetime, hours: int) -> None:
+    key = (cell, start, hours)
+    with _inflight_lock:
+        event = _inflight.pop(key, None)
+    if event is not None:
+        event.set()
 
 
 def _cached_series(cell: Cell, start: datetime, hours: int) -> list[Weather] | None:
@@ -431,16 +489,24 @@ def _fetch_openmeteo(cells: list[Cell], start: datetime, hours: int) -> dict[Cel
 
 
 def _fill_gaps(readings: list[Json]) -> list[float] | None:
-    """Replace nulls with the nearest hour that has a reading. None if every hour is null."""
+    """Replace nulls from the nearest valid hour. None if every hour is null.
+
+    A hole wider than MAX_GAP_FILL_HOURS is an error: a value from a distant hour
+    would be labelled with the wrong time.
+    """
     known = [index for index, reading in enumerate(readings) if reading is not None]
     if not known:
         return None
-    return [
-        float(reading)
-        if reading is not None
-        else float(readings[min(known, key=lambda other, index=index: abs(other - index))])
-        for index, reading in enumerate(readings)
-    ]
+    filled = []
+    for index, reading in enumerate(readings):
+        if reading is not None:
+            filled.append(float(reading))
+            continue
+        nearest = min(known, key=lambda other: abs(other - index))
+        if abs(nearest - index) > MAX_GAP_FILL_HOURS:
+            raise ProviderError("The weather service returned incomplete data.")
+        filled.append(float(readings[nearest]))
+    return filled
 
 
 def _cache_key(cell: Cell, when: datetime) -> str:
@@ -454,7 +520,7 @@ def _get_json(
     url: str,
     params: dict[str, str | int],
     service: str,
-    no_route_statuses: frozenset[int] = frozenset(),
+    no_route_400: Callable[[Json], bool] | None = None,
 ) -> Json:
     timeout = getattr(settings, "PROVIDER_TIMEOUT_S", 15)
     started = monotonic()
@@ -466,9 +532,16 @@ def _get_json(
 
     status = response.status_code
     if status >= 400:
+        # Logged by service and status only: the URL carries the API key.
         _log_failure(service, status, started)
-        if status in no_route_statuses:
-            raise NoRouteError() from None
+        if status == 400 and no_route_400 is not None:
+            try:
+                body = response.json()
+            except ValueError:
+                body = None
+            if no_route_400(body):
+                raise NoRouteError() from None
+            raise ProviderError(f"{service} rejected the request.") from None
         if status == 429:
             raise ProviderError(f"{service} is over its request limit. Try again later.") from None
         raise ProviderError(f"{service} is unavailable right now.") from None
