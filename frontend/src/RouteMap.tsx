@@ -7,7 +7,6 @@ import {
   useRef,
   useState,
   type MutableRefObject,
-  type ReactNode,
 } from "react";
 import Map, {
   NavigationControl,
@@ -22,15 +21,10 @@ import {
 } from "maplibre-gl";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import "maplibre-gl/dist/maplibre-gl.css";
-import type { Checkpoint, Level, PlanResponse } from "./api";
+import type { Checkpoint, PlanResponse } from "./api";
 import { MAP_STYLE, NORTH_AMERICA, pruneBasemap, tuneBasemap } from "./basemap";
-import {
-  formatClockDetailed,
-  formatDistance,
-  formatMiles,
-  prefersReducedMotion,
-} from "./format";
-import { levelInfo } from "./levels";
+import CheckpointPopup, { type PopupState } from "./CheckpointPopup";
+import { prefersReducedMotion } from "./format";
 import type { MapApi } from "./mapHandoff";
 import {
   applyHour,
@@ -59,13 +53,10 @@ interface RouteMapProps {
   selectedId: string | null;
   /** The hour the slider shows. The map opens on it after a lazy load. */
   hourRef: MutableRefObject<number>;
+  /** A checkpoint focus made before the map finished loading; App clears it on a new plan. */
+  pendingFocusRef: MutableRefObject<PopupState | null>;
   onSelectRoute: (routeId: string) => void;
   apiRef: MutableRefObject<MapApi | null>;
-}
-
-interface PopupState {
-  routeId: string;
-  checkpoint: Checkpoint;
 }
 
 interface OpenPopup extends PopupState {
@@ -73,92 +64,11 @@ interface OpenPopup extends PopupState {
   plan: PlanResponse;
 }
 
-const CONDITION_LABELS = { wind: "Wind", rain: "Rain", snow: "Snow" } as const;
-
-function ConditionRow({
-  condition,
-  level,
-  setsLevel,
-  children,
-}: {
-  condition: keyof typeof CONDITION_LABELS;
-  level: Level;
-  setsLevel: boolean;
-  children: ReactNode;
-}) {
-  const info = levelInfo(level);
-  return (
-    <div className={condition === "wind" ? "popup-wide" : undefined}>
-      <dt>{CONDITION_LABELS[condition]}</dt>
-      <dd>
-        {children}
-        <span className="popup-condition" style={{ color: info.color }}>
-          {info.name}
-          {setsLevel ? ", sets the level" : ""}
-        </span>
-      </dd>
-    </div>
-  );
-}
-
-function CheckpointPopup({ routeId, checkpoint }: PopupState) {
-  const info = levelInfo(checkpoint.level);
-  const weather = checkpoint.weather;
-  const warns = checkpoint.level > 0;
-
-  return (
-    <div className="popup">
-      <div className="popup-head">
-        <span
-          className="popup-dot"
-          style={{ backgroundColor: info.color }}
-          aria-hidden="true"
-        />
-        <span className="popup-level">{info.name}</span>
-        <span className="popup-mile">
-          Route {routeId}, mile {formatMiles(checkpoint.mile)}
-        </span>
-      </div>
-      <dl className="popup-grid">
-        <div className="popup-wide">
-          <dt>ETA</dt>
-          <dd>{formatClockDetailed(checkpoint.eta)}</dd>
-        </div>
-        <div>
-          <dt>Covers</dt>
-          <dd>{formatDistance(checkpoint.covers_mi)}</dd>
-        </div>
-        <ConditionRow
-          condition="wind"
-          level={checkpoint.levels.wind}
-          setsLevel={warns && checkpoint.levels.wind === checkpoint.level}
-        >
-          {weather.wind_mph.toFixed(1)} mph (gusts {weather.gust_mph.toFixed(1)} mph)
-        </ConditionRow>
-        <ConditionRow
-          condition="rain"
-          level={checkpoint.levels.rain}
-          setsLevel={warns && checkpoint.levels.rain === checkpoint.level}
-        >
-          {weather.rain_in_hr.toFixed(2)} in/hr
-        </ConditionRow>
-        <ConditionRow
-          condition="snow"
-          level={checkpoint.levels.snow}
-          setsLevel={warns && checkpoint.levels.snow === checkpoint.level}
-        >
-          {weather.snow_in_hr.toFixed(2)} in/hr
-        </ConditionRow>
-      </dl>
-      {warns && <p className="popup-cause">{checkpoint.cause}</p>}
-    </div>
-  );
-}
-
 function RouteMap({
   plan,
   selectedId,
   hourRef,
+  pendingFocusRef,
   onSelectRoute,
   apiRef,
 }: RouteMapProps) {
@@ -184,7 +94,6 @@ function RouteMap({
   const planRef = useRef<PlanResponse | null>(plan);
   const selectedRef = useRef<string | null>(selectedId);
   const onSelectRouteRef = useRef(onSelectRoute);
-  const pendingFocusRef = useRef<PopupState | null>(null);
 
   // A fast drag can fire more input events than the map draws frames; keep only
   // the newest hour and apply it once per frame.
@@ -317,7 +226,7 @@ function RouteMap({
     if (focus !== null) {
       focusOn(map, focus.routeId, focus.checkpoint);
     }
-  }, [applyHourNow, focusOn, hourRef]);
+  }, [applyHourNow, focusOn, hourRef, pendingFocusRef]);
 
   useEffect(() => {
     const map = mapRef.current?.getMap();

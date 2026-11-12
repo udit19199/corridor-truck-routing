@@ -1,5 +1,5 @@
 /**
- * The single copy of the API contract from DESIGN.md section 3.
+ * The single copy of the API contract from DESIGN.md section 5.3.
  * The Django API is the contract owner; these types mirror it.
  */
 

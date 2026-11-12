@@ -29,7 +29,9 @@ from trips.providers import get_providers
 
 ORIGIN = Place("Dallas, TX", -96.797, 32.7767)
 DESTINATION = Place("Chicago, IL", -87.6298, 41.8781)
-DEPARTURE = datetime(2026, 11, 13, 12, tzinfo=UTC)
+# Half past the hour: DESIGN.md 5.4.3 says checkpoint and heatmap levels agree on a
+# non-whole-hour departure.
+DEPARTURE = datetime(2026, 11, 13, 12, 30, tzinfo=UTC)
 
 
 def plan_for(load_lb: int) -> tuple[Plan, float]:

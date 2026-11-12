@@ -5,13 +5,28 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 REPO_DIR = BASE_DIR.parent
 
+
+def _env_value(raw: str) -> str:
+    """A .env value: quotes are stripped, an unquoted value ends at an inline comment."""
+    value = raw.strip()
+    if value[:1] in {"'", '"'}:
+        return value[1:].split(value[0], 1)[0]
+    return value.split(" #", 1)[0].strip()
+
+
+def _read_env_file(path: Path) -> None:
+    for line in path.read_text().splitlines():
+        name, sep, value = line.strip().partition("=")
+        name = name.removeprefix("export ").strip()
+        if not sep or not name or name.startswith("#"):
+            continue
+        os.environ.setdefault(name, _env_value(value))
+
+
 # Local keys live in backend/.env (ignored by git). Real environment variables win.
 _env_file = BASE_DIR / ".env"
 if _env_file.exists():
-    for _line in _env_file.read_text().splitlines():
-        _name, _sep, _value = _line.partition("=")
-        if _sep and not _line.lstrip().startswith("#"):
-            os.environ.setdefault(_name.strip(), _value.strip().strip("'\""))
+    _read_env_file(_env_file)
 
 DEBUG = os.environ.get("DEBUG", "").lower() in {"1", "true", "yes"}
 
@@ -43,11 +58,12 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "same-origin"
 SECURE_HSTS_SECONDS = 0 if DEBUG else 31_536_000
+SECURE_HSTS_PRELOAD = False
+SECURE_SSL_REDIRECT = False
+
 # Per-client request limits on the public API. The e2e suite turns them off because it plans
 # many times from one address.
 THROTTLE_ENABLED = os.environ.get("THROTTLE_ENABLED", "true").lower() in {"1", "true", "yes"}
-SECURE_HSTS_PRELOAD = False
-SECURE_SSL_REDIRECT = False
 
 ROOT_URLCONF = "config.urls"
 WSGI_APPLICATION = "config.wsgi.application"

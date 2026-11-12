@@ -95,14 +95,19 @@ function pad(value: number): string {
   return String(value).padStart(2, "0");
 }
 
+/** A `datetime-local` value for the given moment, in local wall-clock time. */
+export function dateTimeInputValue(date: Date): string {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours(),
+  )}:${pad(date.getMinutes())}`;
+}
+
 /** A `datetime-local` value for the next full local hour. */
 export function nextHourInputValue(now = new Date()): string {
   const next = new Date(now.getTime());
   next.setMinutes(0, 0, 0);
   next.setHours(next.getHours() + 1);
-  return `${next.getFullYear()}-${pad(next.getMonth() + 1)}-${pad(next.getDate())}T${pad(
-    next.getHours(),
-  )}:00`;
+  return dateTimeInputValue(next);
 }
 
 /** `datetime-local` values are local wall-clock time; the API wants UTC ISO. */

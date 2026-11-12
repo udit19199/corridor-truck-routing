@@ -1,4 +1,4 @@
-import type { PlanResponse, Route } from "./api";
+import type { Level, PlanResponse, Route, RouteSummary } from "./api";
 import {
   formatClock,
   formatDistance,
@@ -6,10 +6,22 @@ import {
   formatMiles,
   formatRisk,
 } from "./format";
-import { LEVELS, levelInfo } from "./levels";
+import { levelInfo } from "./levels";
 
+const ALL_LEVELS = [0, 1, 2, 3, 4] as const;
 /** The miles the ranking compares first: No Travel, then Severe, then High. */
 const RANK_LEVELS = [4, 3, 2] as const;
+
+/** The levels with miles above zero, in the order given. */
+function milesByLevel(
+  byLevel: RouteSummary["miles_by_level"],
+  levels: readonly Level[],
+): { level: Level; miles: number }[] {
+  return levels.flatMap((level) => {
+    const miles = byLevel[level] ?? 0;
+    return miles > 0 ? [{ level, miles }] : [];
+  });
+}
 
 interface RouteCardProps {
   route: Route;
@@ -26,17 +38,14 @@ function RouteCard({
   reason,
   onSelect,
 }: RouteCardProps) {
-  const levelMiles = LEVELS.flatMap((levelMeta, level) => {
-    const miles = route.summary.miles_by_level[level];
-    return miles === undefined || miles <= 0 ? [] : [{ levelMeta, miles }];
-  });
-  const rankMiles = RANK_LEVELS.flatMap((level) => {
-    const miles = route.summary.miles_by_level[level];
-    return miles > 0 ? [{ level, miles }] : [];
-  });
+  const levelMiles = milesByLevel(route.summary.miles_by_level, ALL_LEVELS);
+  const rankMiles = milesByLevel(route.summary.miles_by_level, RANK_LEVELS);
   const worst = levelInfo(route.summary.worst);
   const barLabel = levelMiles
-    .map(({ levelMeta, miles }) => `${levelMeta.name}: ${formatMiles(miles)} miles`)
+    .map(
+      ({ level, miles }) =>
+        `${levelInfo(level).name}: ${formatMiles(miles)} miles`,
+    )
     .join(", ");
 
   return (
@@ -47,14 +56,11 @@ function RouteCard({
       data-route-id={route.id}
       data-recommended={String(recommended)}
       data-selected={String(selected)}
-      aria-label={`Route ${route.id}, ${route.name}`}
       aria-pressed={selected}
       onClick={() => onSelect(route.id)}
     >
       <span className="rc-head">
-        <span className="rc-letter" aria-hidden="true">
-          {route.id}
-        </span>
+        <span className="rc-letter">{route.id}</span>
         <span className="rc-name" title={route.name}>
           {route.name}
         </span>
@@ -95,17 +101,20 @@ function RouteCard({
         role="img"
         aria-label={`Miles by risk level (${barLabel})`}
       >
-        {levelMiles.map(({ levelMeta, miles }) => (
-          <span
-            key={levelMeta.name}
-            title={`${levelMeta.name}: ${formatMiles(miles)} mi`}
-            style={{
-              flexGrow: miles,
-              flexBasis: 0,
-              backgroundColor: levelMeta.color,
-            }}
-          />
-        ))}
+        {levelMiles.map(({ level, miles }) => {
+          const levelMeta = levelInfo(level);
+          return (
+            <span
+              key={levelMeta.name}
+              title={`${levelMeta.name}: ${formatMiles(miles)} mi`}
+              style={{
+                flexGrow: miles,
+                flexBasis: 0,
+                backgroundColor: levelMeta.color,
+              }}
+            />
+          );
+        })}
       </span>
 
       <span className="rc-ranks">
