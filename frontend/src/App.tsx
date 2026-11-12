@@ -62,7 +62,7 @@ interface ShownPlan {
   plan: PlanResponse;
   request: PlanRequest;
   selectedId: string;
-  /** The checkpoint whose popup is open. Cleared by a new plan or another route. */
+  /** The checkpoint whose popup is open. Cleared by a new plan, a route click or closing the popup. */
   focus: PopupState | null;
   /** Bumped for every plan, so the slider resets. */
   version: number;
@@ -112,6 +112,10 @@ export default function App() {
   }, []);
 
   const handlePopup = useCallback((focus: PopupState | null) => {
+    if (focus === null) {
+      // A popup closed before the map loaded must not reopen when it does.
+      pendingFocusRef.current = null;
+    }
     setShown((previous) =>
       previous === null || (previous.focus === null && focus === null)
         ? previous
@@ -140,12 +144,13 @@ export default function App() {
           block: "start",
         });
       }
+      // The row and the popup show now; the map flies there now or once it loads.
+      const focus = { routeId: selectedRoute.id, checkpoint };
+      handlePopup(focus);
       if (mapApiRef.current === null) {
-        // The popup and the marked row show now; the map flies there once it loads.
-        pendingFocusRef.current = { routeId: selectedRoute.id, checkpoint };
-        handlePopup({ routeId: selectedRoute.id, checkpoint });
+        pendingFocusRef.current = focus;
       } else {
-        mapApiRef.current.focusCheckpoint(selectedRoute.id, checkpoint);
+        mapApiRef.current.focusCheckpoint(focus.routeId, checkpoint);
       }
     },
     [selectedRoute, handlePopup],

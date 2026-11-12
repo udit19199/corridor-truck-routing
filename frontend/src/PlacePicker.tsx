@@ -79,8 +79,8 @@ function usePlaceSearch(inputId: string, query: string, value: Place | null) {
     setActiveIndex(-1);
   }
 
-  function resetSearch() {
-    setPlaceSearch({ status: "idle" });
+  function resetSearch(status: "idle" | "searching" = "idle") {
+    setPlaceSearch({ status });
     setActiveIndex(-1);
   }
 
@@ -164,26 +164,27 @@ interface ComboboxKeys {
   closeList: () => void;
   dismiss: () => void;
   stepActive: (delta: 1 | -1) => void;
-  /** False when there is nothing to choose, so Enter can submit the form. */
+  /** True when Enter was handled here: a place was chosen or a search is still pending. */
   chooseActive: () => boolean;
 }
 
 function handleComboboxKey(
   event: KeyboardEvent<HTMLInputElement>,
-  listOpen: boolean,
+  /** Whether the list is on screen, not just flagged open with nothing to show. */
+  listShown: boolean,
   keys: ComboboxKeys,
 ) {
   const { key } = event;
   if (key === "ArrowDown" || key === "ArrowUp") {
     event.preventDefault();
-    if (!listOpen) {
+    if (!listShown) {
       keys.openList();
       return;
     }
     keys.stepActive(key === "ArrowDown" ? 1 : -1);
     return;
   }
-  if (key === "Enter" && listOpen) {
+  if (key === "Enter" && listShown) {
     if (keys.chooseActive()) {
       event.preventDefault();
     }
@@ -311,8 +312,9 @@ export default function PlacePicker({
 
   function handleQueryChange(next: string) {
     setQuery(next);
-    // Old matches must not stay choosable while the debounced search for the new text waits.
-    resetSearch();
+    // Old matches must not stay choosable while the debounced search for the new text
+    // waits, and Enter must wait for that search rather than submit the form.
+    resetSearch(next.trim().length >= 2 ? "searching" : "idle");
     if (value !== null && next !== value.label) {
       onChange(null);
     }
@@ -320,8 +322,11 @@ export default function PlacePicker({
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    handleComboboxKey(event, listOpen, {
-      openList: () => setListOpen(true),
+    handleComboboxKey(event, listShown, {
+      openList: () => {
+        setListOpen(true);
+        setActiveIndex(options.length > 0 ? 0 : -1);
+      },
       closeList: () => {
         setListOpen(false);
         setActiveIndex(-1);
@@ -333,11 +338,12 @@ export default function PlacePicker({
         ),
       chooseActive: () => {
         const place = activePlace(options, activeIndex);
-        if (place === null) {
-          return false;
+        if (place !== null) {
+          choose(place);
+          return true;
         }
-        choose(place);
-        return true;
+        // Enter submits only once the search has answered with nothing to choose.
+        return placeSearch.status !== "done" && placeSearch.status !== "failed";
       },
     });
   }
@@ -376,6 +382,7 @@ export default function PlacePicker({
               placeSearch.status === "failed"
             ) {
               setListOpen(true);
+              setActiveIndex(options.length > 0 ? 0 : -1);
             }
           }}
           onKeyDown={handleKeyDown}
