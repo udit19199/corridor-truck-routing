@@ -5,6 +5,14 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 REPO_DIR = BASE_DIR.parent
 
+# Local keys live in backend/.env (ignored by git). Real environment variables win.
+_env_file = BASE_DIR / ".env"
+if _env_file.exists():
+    for _line in _env_file.read_text().splitlines():
+        _name, _sep, _value = _line.partition("=")
+        if _sep and not _line.lstrip().startswith("#"):
+            os.environ.setdefault(_name.strip(), _value.strip().strip("'\""))
+
 DEBUG = os.environ.get("DEBUG", "").lower() in {"1", "true", "yes"}
 
 # No sessions or admin, so an unconfigured instance can still boot with a throwaway key.
