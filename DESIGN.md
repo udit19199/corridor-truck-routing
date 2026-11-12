@@ -6,7 +6,7 @@ Status: implemented and running in fixture mode. The TomTom integration is writt
 
 ## 1. Context
 
-A dispatcher plans a truck run a few hours to a few days ahead. Weather along the way changes while the truck drives, so the forecast that matters at mile 600 is the one for the hour the truck gets there, not the one at departure. Spotter's brief gives risk bands for wind, rain and snow, two load rules that make wind worse for heavy trucks, and asks for three route options, checkpoints every 10, 25 or 50 miles, a recommendation and a corridor heatmap with a 0 to 48 hour slider.
+The brief's user is the truck driver planning a run a few hours to a few days ahead. The same screen also serves a dispatcher planning for a driver: the verdict and its reason come first, and the per-checkpoint numbers sit underneath for anyone who wants to check them. Weather along the way changes while the truck drives, so the forecast that matters at mile 600 is the one for the hour the truck gets there, not the one at departure. Spotter's brief gives risk bands for wind, rain and snow, two load rules that make wind worse for heavy trucks, and asks for three route options, checkpoints every 10, 25 or 50 miles, a recommendation and a corridor heatmap with a 0 to 48 hour slider.
 
 ### Goals
 
@@ -16,7 +16,7 @@ A dispatcher plans a truck run a few hours to a few days ahead. Weather along th
 
 ### Non-goals
 
-- Driver hours of service and rest breaks. ETAs are pure driving time.
+- Driver hours of service and rest breaks in this version. ETAs are pure driving time; section 15 states the cost and the plan.
 - Live re-routing while a truck is moving, accounts, saved trips, history.
 - Routes outside the United States (the rules are in pounds and the brief's examples are US).
 - Weather beyond 12 days out (the forecast source stops at about 15 days and the plan needs 48 hours past departure).
@@ -28,7 +28,7 @@ A dispatcher plans a truck run a few hours to a few days ahead. Weather along th
 | Functional | Up to three truck routes between two US places | 3 when the provider has them | `providers._tomtom_routes` |
 | Functional | Checkpoints every 10, 25 or 50 mi plus the destination, each with ETA, weather, levels and cause | Exact, see section 4.2 | `planner.plan_trip` |
 | Functional | Risk and load rules exactly as the brief states, edges made explicit | Section 3 | `rules.py` |
-| Functional | A recommendation with a reason a dispatcher can check | One sentence naming the deciding numbers | `rules.rank` |
+| Functional | A recommendation with a reason a driver or dispatcher can check | One sentence naming the deciding numbers | `rules.rank` |
 | Functional | Corridor heatmap for hours 0 to 48 with a slider | 49 hours, every cell within 15 mi of any route | `planner`, `RouteMap` |
 | Latency | Server time for one plan | Fixture: 85 ms measured. Live: estimated 1 to 2 s, dominated by one TomTom call and up to 3 parallel Open-Meteo batches (Open-Meteo alone measured about 1.4 s cold for 279 cells) | section 6 |
 | Payload | Plan response, 25 mi interval, Dallas to Chicago | 216 KB raw, 52 KB gzip (10 mi: 263 / 56 KB; 50 mi: 200 / 51 KB) | GZip middleware |
@@ -504,7 +504,7 @@ There are no unit tests by choice: the e2e suite runs the real rules on recorded
 
 Assumptions:
 
-1. ETAs use TomTom truck travel times and ignore driver rest breaks.
+1. ETAs use TomTom truck travel times and ignore hours of service. This costs accuracy, not legality checks: the app never claims a schedule is legal, but it scores late checkpoints at the wrong hour. US rules allow 11 hours of driving, then a 10-hour break (plus a 30-minute break after 8 hours). On fixture Route A (964 mi, 17 h 05 min of driving) the truck reaches about mile 620 at hour 11, so every checkpoint on the last 340 or so miles is really reached about 10 hours later than shown, and is scored with a forecast 10 hours too early. Next steps, in order: (a) apply the 11 h driving and 10 h break rule by default, shifting ETAs after hour 11 and moving the heatmap trucks to match; (b) let the driver enter a planned stop (place and length) instead; (c) read the driver's remaining hours from their ELD so the clock starts where they actually are. (a) is a change to ETA interpolation in the planner plus one e2e test; it was left out to keep the brief's scope and the deadline.
 2. Wind means sustained wind at 10 m. Gusts are shown but not scored.
 3. Weather comes from the forecast hour nearest each ETA.
 4. Heatmap hour 0 is the departure's whole hour (12:00 for a 12:30 departure), so every slider step is a real forecast hour.
@@ -519,6 +519,6 @@ Risks:
 
 Open questions for Spotter:
 
-- Should driver hours of service shift ETAs (a 10-hour break changes which hour a checkpoint sees)?
+- Should hours of service shift ETAs by default (assumption 1), or should drivers always enter their own planned stops?
 - Should gusts count, for example a gust rule for high-sided empty trailers?
 - Is "fewest No Travel miles first" the right reading of the brief's ranking list, which does not mention No Travel?

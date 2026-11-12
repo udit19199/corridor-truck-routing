@@ -26,7 +26,7 @@ The brief leaves these open. Each choice is written into `backend/trips/rules.py
 - Any No Travel mile ranks a route below every route without one.
 - Each checkpoint counts for the miles halfway to its neighbours.
 - Wind means the sustained 10 m speed. Gusts are shown but not scored.
-- ETAs use TomTom truck travel times and do not include driver rest breaks.
+- ETAs are pure driving time: they ignore the 11-hour driving limit and the 10-hour break. On a 17-hour run that means the last few hundred miles are scored with a forecast about 10 hours too early. The fix (apply the 11 h / 10 h rule by default, then let the driver enter a planned stop, later read remaining hours from an ELD) is described in `DESIGN.md` section 15.
 - Heatmap hour 0 is the departure's whole hour (12:00 for a 12:30 departure), not the current time.
 - Departures can be up to 12 days ahead; the forecast runs out after that.
 - The form asks for cargo weight. TomTom gets cargo plus 35,000 lb for the empty truck; the risk rules use cargo alone, as the brief writes them.
@@ -67,3 +67,7 @@ They cover the recommendation, the load rule flipping it at exactly 40,001 lb, c
 ## Stack
 
 Django 5.2 (plain JSON views, no database), React 18 + TypeScript + Vite, MapLibre GL with OpenFreeMap tiles, TomTom Routing and Search, Open-Meteo. Hosted on Render as one Docker image; Django serves the built front end.
+
+## How this was built
+
+I built this by directing AI coding agents, and I own the result, good and bad. I wrote the plan and the design first (`DESIGN.md`), split the work into pieces for separate agents, and reviewed their output in rounds with independent reviewer agents. I decided the open questions in the brief, chose what to fix and what to leave, and checked each change with the tests and in the browser before committing it. The commit history shows the order: design, then the core, then review and fix rounds.
