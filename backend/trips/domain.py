@@ -40,6 +40,15 @@ class Levels:
 
 
 @dataclass(frozen=True)
+class Assessment:
+    """The level of each weather condition, the worst of them, and why it is the worst."""
+
+    levels: Levels
+    level: Level
+    cause: str
+
+
+@dataclass(frozen=True)
 class RouteOption:
     """A raw route from a provider, before checkpoints and scoring."""
 
