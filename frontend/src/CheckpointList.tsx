@@ -1,26 +1,24 @@
 import { useState } from "react";
-import type { Checkpoint, Route } from "./api";
+import type { Checkpoint, IntervalMi, Route } from "./api";
 import { formatClock, formatMiles } from "./format";
 import { levelInfo } from "./levels";
 
 interface CheckpointListProps {
   route: Route;
+  /** The plan's checkpoint spacing, which a short route can differ from. */
+  intervalMi: IntervalMi;
   onFocus: (checkpoint: Checkpoint) => void;
 }
 
 export default function CheckpointList({
   route,
+  intervalMi,
   onFocus,
 }: CheckpointListProps) {
   const [focused, setFocused] = useState<{ routeId: string; mile: number } | null>(
     null,
   );
   const shownMile = focused?.routeId === route.id ? focused.mile : null;
-  const [firstCheckpoint, secondCheckpoint] = route.checkpoints;
-  const spacingMi =
-    firstCheckpoint !== undefined && secondCheckpoint !== undefined
-      ? Math.round(secondCheckpoint.mile - firstCheckpoint.mile)
-      : null;
 
   return (
     <section className="section" aria-labelledby="checkpoints-heading">
@@ -28,8 +26,7 @@ export default function CheckpointList({
         <h2 id="checkpoints-heading">Checkpoints</h2>
         <span className="section-meta">
           Route {route.id}, {route.checkpoints.length} checkpoint
-          {route.checkpoints.length === 1 ? "" : "s"}
-          {spacingMi !== null && ` every ${spacingMi} mi`}
+          {route.checkpoints.length === 1 ? "" : "s"} every {intervalMi} mi
         </span>
       </div>
 

@@ -184,12 +184,17 @@ backend/
   scripts/check_fixture.py   asserts the fixture scenarios and the checkpoint/heatmap agreement
 frontend/src/
   api.ts               the one TypeScript copy of the contract in 5.3, fetch wrappers
-  App.tsx              page state, plan header, error banner, lazy map, slider wiring
-  TripForm.tsx         place search (usePlaceSearch hook), departure, cargo, interval; field validation
+  App.tsx              layout and wiring: shown plan, plan header, lazy map, slider and focus handoff
+  usePlanRequest.ts    one plan request at a time: abort the previous one, 30 s timeout, error copy
+  PanelStates.tsx      empty, loading, refreshing, error banner and risk legend
+  TripForm.tsx         departure, cargo and interval fields; submit and interval rules
+  PlacePicker.tsx      place combobox: debounced search (usePlaceSearch), list, keyboard
+  tripFormCheck.ts     pure form validation: limits, field messages, first invalid field
   RouteCards.tsx       one card per route: ranking numbers, time, distance, recommended badge and reason
   CheckpointList.tsx   checkpoints of the selected route; a click focuses the map
   HourSlider.tsx       0 to maxHour slider labelled "+12 h, Thu 18:00 CST"
-  RouteMap.tsx         react-map-gl wiring, popup, hour updates once per animation frame
+  RouteMap.tsx         react-map-gl wiring, hour updates once per animation frame
+  CheckpointPopup.tsx  checkpoint popup: ETA, level, cause, conditions, covered miles
   mapLayers.ts         layer install, plan data, selection, hour, camera
   planGeoJson.ts       plan -> GeoJSON for heat cells, routes, checkpoints, trucks
   basemap.ts           dark OpenFreeMap style, pruned and contrast-tuned at load
@@ -399,7 +404,7 @@ Route names are the two roads with the most distance on the route, made distinct
 - Layers, bottom to top, all under the basemap labels: heat cells (fill), route lines (others grey, selected blue and wider), checkpoint circles coloured by level, trucks.
 - **Slider path.** GeoJSON for a plan is built once. Each heat cell has a numeric feature id, and `fill-color` reads `["feature-state", "level"]` (transparent when unset). A slider move, coalesced to one per animation frame, sets one feature state per cell and replaces the three-point truck source. It never changes the style. A data-driven paint expression (`match` on `r{h}`) was the first version; MapLibre reloads the source on every change of such a property (1 reload and 6 `sourcedata` events per move). `global-state` was tried and rejected because combined with per-cell data it still reloads. Measured with a 4x CPU throttle on 279 cells: 0 reloads per move, frame p50 30.3 ms and p95 32.6 ms (was 30.6 and 34.3), feature-state writes 0.1 ms p95.
 - Trucks show each route's position at `heatmap.start + h hours`: at the origin before departure, hidden after arrival.
-- App keeps the current slider hour in a ref the map reads when it loads, and the map holds a checkpoint focus made before its style finished loading and applies it on load. A pending focus is dropped when a new plan arrives.
+- App keeps the current slider hour and any checkpoint focus made before the map finished loading in two refs the map reads when it loads. A new plan resets the hour to 0 and drops a pending focus.
 - Level colours come from `levels.ts` only and match across map, cards, list and legend. Times show in the browser's time zone with its abbreviation.
 - Failures: a missing WebGL context, a failed map chunk or a failed basemap style all show one message, and the form and cards keep working.
 

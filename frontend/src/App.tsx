@@ -3,14 +3,12 @@ import {
   lazy,
   Suspense,
   useCallback,
-  useEffect,
   useRef,
   useState,
   type ReactNode,
 } from "react";
 import {
   maxHeatHour,
-  planTrip,
   type Checkpoint,
   type PlanRequest,
   type PlanResponse,
@@ -23,16 +21,22 @@ import {
   timeZoneAbbreviation,
 } from "./format";
 import HourSlider from "./HourSlider";
-import { LEVELS } from "./levels";
 import type { MapApi } from "./mapHandoff";
 import MapUnavailable from "./MapUnavailable";
+import {
+  EmptyState,
+  ErrorBanner,
+  LoadingState,
+  RefreshState,
+  RiskLegend,
+} from "./PanelStates";
+import type { PopupState } from "./CheckpointPopup";
 import RouteCards from "./RouteCards";
 import TripForm from "./TripForm";
+import { usePlanRequest } from "./usePlanRequest";
 
 // The map pulls in MapLibre; loading it separately lets the form paint first.
 const RouteMap = lazy(() => import("./RouteMap"));
-
-const PLAN_TIMEOUT_MS = 30_000;
 
 // A failed map chunk or missing WebGL must not blank the form and route cards.
 class MapErrorBoundary extends Component<
@@ -58,131 +62,8 @@ interface ShownPlan {
   plan: PlanResponse;
   request: PlanRequest;
   selectedId: string;
-  /** Bumped for every plan, so the slider remounts at hour 0. */
+  /** Bumped for every plan, so the slider and checkpoint focus reset. */
   version: number;
-}
-
-interface RequestState {
-  status: "idle" | "loading" | "error";
-  message?: string;
-}
-
-const IDLE: RequestState = { status: "idle" };
-
-function errorMessage(error: unknown): string {
-  if (
-    error instanceof DOMException &&
-    (error.name === "TimeoutError" || error.name === "AbortError")
-  ) {
-    return "Planning took too long. Try again.";
-  }
-  if (error instanceof TypeError) {
-    return "Could not reach the server. Check your connection and try again.";
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return "The trip could not be planned.";
-}
-
-function RiskLegend() {
-  return (
-    <ul className="legend" aria-label="Risk levels">
-      {LEVELS.map((info) => (
-        <li key={info.name}>
-          <span
-            className="legend-dot"
-            style={{ backgroundColor: info.color }}
-            aria-hidden="true"
-          />
-          {info.name}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div className="empty">
-      <svg
-        className="empty-art"
-        viewBox="0 0 320 84"
-        role="img"
-        aria-label="Two cities joined by a dotted route with weather cells"
-      >
-        <rect
-          x="0"
-          y="0"
-          width="320"
-          height="84"
-          rx="12"
-          fill="var(--surface-sunken)"
-        />
-        <rect x="24" y="20" width="42" height="42" rx="6" fill="#1b2735" />
-        <rect x="230" y="12" width="50" height="50" rx="6" fill="#222f3e" />
-        <rect x="150" y="48" width="38" height="38" rx="6" fill="#18232f" />
-        <path
-          d="M62 57 C 108 57, 112 27, 158 27 S 214 46, 248 46"
-          fill="none"
-          stroke="var(--accent-bright)"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeDasharray="1 6"
-        />
-        <circle
-          cx="62"
-          cy="57"
-          r="5"
-          fill="var(--panel)"
-          stroke="var(--accent-bright)"
-          strokeWidth="2"
-        />
-        <circle cx="248" cy="46" r="5" fill="var(--accent-bright)" />
-      </svg>
-      <h2>Plan a weather-safe run</h2>
-      <p>
-        Pick two US cities, a departure time and a load. You’ll get three routes
-        ranked by risk, with the forecast along each corridor.
-      </p>
-      <ul className="empty-points">
-        <li>Three routes, ranked by risk</li>
-        <li>Weather at every checkpoint</li>
-        <li>Hourly corridor heatmap</li>
-      </ul>
-    </div>
-  );
-}
-
-function LoadingState() {
-  return (
-    <div
-      className="results-loading"
-      data-testid="loading"
-      role="status"
-      aria-live="polite"
-    >
-      <span className="sr-only">Planning trip</span>
-      <div className="skeleton skeleton-bar" />
-      <div className="skeleton skeleton-card" />
-      <div className="skeleton skeleton-card" />
-      <div className="skeleton skeleton-card" />
-    </div>
-  );
-}
-
-function RefreshState() {
-  return (
-    <div
-      className="refresh-state"
-      data-testid="loading"
-      role="status"
-      aria-live="polite"
-    >
-      <span className="spinner spinner-dark" aria-hidden="true" />
-      Updating plan…
-    </div>
-  );
 }
 
 function PlanSummary({ shown }: { shown: ShownPlan }) {
@@ -198,51 +79,25 @@ function PlanSummary({ shown }: { shown: ShownPlan }) {
 
 export default function App() {
   const [shown, setShown] = useState<ShownPlan | null>(null);
-  const [request, setRequest] = useState<RequestState>(IDLE);
-  const requestRef = useRef<AbortController | null>(null);
   const mapApiRef = useRef<MapApi | null>(null);
   const hourRef = useRef(0);
+  // Holds a checkpoint focus made while the map code is still loading.
+  const pendingFocusRef = useRef<PopupState | null>(null);
 
-  const runPlan = useCallback((nextRequest: PlanRequest) => {
-    requestRef.current?.abort();
-    const controller = new AbortController();
-    requestRef.current = controller;
-    setRequest({ status: "loading" });
-
-    const signal = AbortSignal.any([
-      controller.signal,
-      AbortSignal.timeout(PLAN_TIMEOUT_MS),
-    ]);
-    planTrip(nextRequest, signal)
-      .then((plan) => {
-        // A superseded or timed out request must not replace what is on screen.
-        if (controller.signal.aborted) {
-          return;
-        }
-        // The new plan starts at hour 0: the slider remounts there, and the map
-        // reads this ref, so reset it before either can paint.
-        hourRef.current = 0;
-        setShown((previous) => ({
-          plan,
-          request: nextRequest,
-          selectedId: plan.recommended_id,
-          version: (previous?.version ?? 0) + 1,
-        }));
-        setRequest(IDLE);
-      })
-      .catch((error: unknown) => {
-        if (controller.signal.aborted) {
-          return;
-        }
-        setRequest({ status: "error", message: errorMessage(error) });
-      });
+  const handlePlan = useCallback((plan: PlanResponse, request: PlanRequest) => {
+    // The new plan starts at hour 0: the slider remounts there, and the map reads
+    // this ref, so reset it before either can paint.
+    hourRef.current = 0;
+    pendingFocusRef.current = null;
+    setShown((previous) => ({
+      plan,
+      request,
+      selectedId: plan.recommended_id,
+      version: (previous?.version ?? 0) + 1,
+    }));
   }, []);
 
-  useEffect(() => {
-    return () => {
-      requestRef.current?.abort();
-    };
-  }, []);
+  const { request, runPlan } = usePlanRequest(handlePlan);
 
   const handleSelectRoute = useCallback((routeId: string) => {
     setShown((previous) =>
@@ -271,7 +126,11 @@ export default function App() {
           block: "start",
         });
       }
-      mapApiRef.current?.focusCheckpoint(selectedRoute.id, checkpoint);
+      if (mapApiRef.current === null) {
+        pendingFocusRef.current = { routeId: selectedRoute.id, checkpoint };
+      } else {
+        mapApiRef.current.focusCheckpoint(selectedRoute.id, checkpoint);
+      }
     },
     [selectedRoute],
   );
@@ -301,46 +160,14 @@ export default function App() {
 
         <div className="panel-scroll">
           {request.status === "error" && (
-            <div
-              className="error-banner"
-              data-testid="error-banner"
-              role="alert"
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                aria-hidden="true"
-              >
-                <path
-                  d="M8 2.2 14.4 13H1.6L8 2.2Z"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.3"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="M8 6.2v3.1M8 11.3v.1"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-              </svg>
-              <div>
-                <strong>Couldn’t plan this trip</strong>
-                <p>{request.message}</p>
-                {shown !== null && (
-                  <p className="error-previous">
-                    The results below are from the previous plan.
-                  </p>
-                )}
-              </div>
-            </div>
+            <ErrorBanner
+              message={request.message}
+              hasPreviousPlan={shown !== null}
+            />
           )}
 
           <TripForm
             loading={request.status === "loading"}
-            hasPlan={shown !== null}
             planIntervalMi={shown?.plan.interval_mi ?? null}
             onSubmit={runPlan}
           />
@@ -358,7 +185,9 @@ export default function App() {
               />
               {selectedRoute !== null && (
                 <CheckpointList
+                  key={shown.version}
                   route={selectedRoute}
+                  intervalMi={shown.plan.interval_mi}
                   onFocus={handleFocusCheckpoint}
                 />
               )}
@@ -387,6 +216,7 @@ export default function App() {
               plan={shown?.plan ?? null}
               selectedId={shown?.selectedId ?? null}
               hourRef={hourRef}
+              pendingFocusRef={pendingFocusRef}
               onSelectRoute={handleSelectRoute}
               apiRef={mapApiRef}
             />
