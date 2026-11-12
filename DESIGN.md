@@ -1,33 +1,44 @@
-# Design
+# Corridor: design
 
-How the app turns "Dallas to Chicago, Thursday 06:00, 45,000 lb" into three scored routes, a recommendation and a corridor heatmap.
+How the app turns "Dallas to Chicago, Thursday 06:00, 45,000 lb" into three scored truck routes, a recommendation and a 48-hour corridor heatmap.
 
-## 1. High-level design
+Status: implemented. Every number below comes from the code or from a measurement, and estimates are marked as such.
 
+## 1. Context
 
-```
-Browser (React + MapLibre)                Django API                     Outside services
---------------------------                ----------                     ----------------
-type "Dall"  ── GET /api/geocode?q= ──▶   geocode()  ── TomTom Search ──▶  TomTom
-submit form  ── POST /api/plan ───────▶   plan_trip()
-                                            1. routes()   ── TomTom Routing (truck, 3 routes)
-                                            2. checkpoints + ETAs (pure)
-                                            3. corridor grid cells (pure)
-                                            4. weather()  ── Open-Meteo hourly, one batch, cached
-                                            5. risk + ranking (pure)
-render map, cards, ◀── PlanResponse ────
-heatmap, slider (no more requests)
-```
+A dispatcher plans a truck run a few hours to a few days ahead. Weather along the way changes while the truck drives, so the forecast that matters at mile 600 is the one for the hour the truck gets there, not the one at departure. Spotter's brief gives risk bands for wind, rain and snow, two load rules that make wind worse for heavy trucks, and asks for three route options, checkpoints every 10, 25 or 50 miles, a recommendation and a corridor heatmap with a 0 to 48 hour slider.
 
-- **One request per plan.** `/api/plan` returns routes, checkpoints, the recommendation and the whole 0–48 h heatmap. Moving the slider never calls the server, so it stays smooth.
-- **The server owns all keys and rules.** The browser never sees the TomTom key and never computes risk.
-- **No database.** Every plan is computed from live data. Django's local-memory cache holds weather by grid cell for 30 minutes so repeat plans stay under Open-Meteo's free limit (10,000 location-calls a day).
-- **Fixture mode.** `ROUTING_PROVIDER=fixture` swaps TomTom for recorded routes; `WEATHER_PROVIDER=fixture` swaps Open-Meteo for a scripted, moving storm. The end-to-end tests run with both set, so they are repeatable and need no key. Defaults are `tomtom` and `openmeteo`.
-- **Hosting.** One Docker image on Render. Django serves the built React files (WhiteNoise) and the API from one URL, so there is no CORS. A GitHub Actions job pings `/api/health` every 10 minutes so the free instance does not sleep.
+### Goals
 
-## 2. Rules (the spec, made exact)
+1. Score each route with the brief's rules at the right hour for every checkpoint, and say plainly why one route wins.
+2. Make the map and slider feel instant: one network request per plan, no request and no data rebuild while sliding.
+3. Run on free tiers (TomTom, Open-Meteo, Render) without leaking keys or letting one client spend the shared quota.
 
-### Risk levels
+### Non-goals
+
+- Driver hours of service and rest breaks. ETAs are pure driving time.
+- Live re-routing while a truck is moving, accounts, saved trips, history.
+- Routes outside the United States (the rules are in pounds and the brief's examples are US).
+- Weather beyond 12 days out (the forecast source stops at about 15 days and the plan needs 48 hours past departure).
+
+## 2. Requirements
+
+| Kind | Requirement | Target | Where it is met |
+|---|---|---|---|
+| Functional | Up to three truck routes between two US places | 3 when the provider has them | `providers._tomtom_routes` |
+| Functional | Checkpoints every 10, 25 or 50 mi plus the destination, each with ETA, weather, levels and cause | Exact, see section 4.2 | `planner.plan_trip` |
+| Functional | Risk and load rules exactly as the brief states, edges made explicit | Section 3 | `rules.py` |
+| Functional | A recommendation with a reason a dispatcher can check | One sentence naming the deciding numbers | `rules.rank` |
+| Functional | Corridor heatmap for hours 0 to 48 with a slider | 49 hours, every cell within 15 mi of any route | `planner`, `RouteMap` |
+| Latency | Server time for one plan | Fixture: 85 ms measured. Live: about 1.4 s measured once (estimate, depends on TomTom and Open-Meteo) | section 6 |
+| Payload | Plan response, 25 mi interval, Dallas to Chicago | 216 KB raw, 52 KB gzip (10 mi: 263 / 56 KB; 50 mi: 200 / 51 KB) | GZip middleware |
+| Smoothness | Slider move with 4x CPU throttle | 0 source reloads, frame p95 32.6 ms | section 5.6 |
+| Quota | Stay inside free tiers | Open-Meteo 600 locations a minute, 10,000 a day; TomTom 2,500 requests a day | section 6 |
+| Security | Keys never reach the browser, logs or errors | Server-only env vars, failures logged without URLs | section 9 |
+
+## 3. Rules (the brief, made exact)
+
+### 3.1 Risk levels
 
 `Level` is an ordered enum: `LOW=0, MODERATE=1, HIGH=2, SEVERE=3, NO_TRAVEL=4`. The number is also the score used for average risk.
 
@@ -37,157 +48,356 @@ heatmap, slider (no more requests)
 | Rain (in/hr, rain + showers) | < 0.10 | 0.10 to < 0.25 | 0.25 to < 0.50 | 0.50 to ≤ 1.00 | > 1.00 |
 | Snow (in/hr, snowfall) | < 0.5 | 0.5 to < 1.0 | 1.0 to < 2.0 | 2.0 to ≤ 3.0 | > 3.0 |
 
-The brief's ranges touch at 0.25, 0.50 and so on. A value on a shared edge goes to the higher band. The top edges follow the brief's own "> 1.00" and "> 3.0", so 1.00 in/hr rain is still Severe.
+The brief's ranges touch at 0.25, 0.50 and so on. A value on a shared edge goes to the higher band. The top edges follow the brief's own "> 1.00" and "> 3.0", so 1.00 in/hr of rain is still Severe. Values are rounded (wind to 0.1 mph, rain and snow to 0.01 in/hr) before they are classified, so the number on screen always matches its level. Tables: `WIND_BANDS`, `RAIN_BANDS`, `SNOW_BANDS` in `rules.py`.
 
-### Load rules (raise wind only, never lower)
+### 3.2 Load rules (raise the wind level, never lower it)
 
-| Wind | Load | Wind level becomes |
+| Wind | Cargo | Wind level becomes |
 |---|---|---|
 | ≥ 55 mph | any | No Travel (same as the table) |
 | 45 to < 55 mph | > 30,000 lb | No Travel |
 | 35 to < 45 mph | > 40,000 lb | Severe |
 
-### One checkpoint
+"Over" is strict: 40,000 lb with 40 mph wind stays High, 40,001 lb is Severe. The e2e suite pins this edge. Table: `LOAD_RULES`.
 
-`level = max(wind_level, rain_level, snow_level)`. The `cause` field names the condition that set it (ties: wind, then snow, then rain), for example "wind 41 mph with 45,000 lb load".
+### 3.3 One checkpoint
 
-### Miles per checkpoint
+`level = max(wind, rain, snow)`. `cause` names the condition that set it, with ties going to wind, then snow, then rain, for example "wind 41.0 mph with 45,000 lb load". A Low checkpoint's cause is "no condition above Low", and the UI hides it.
 
-Checkpoints sit at mile 0, N, 2N, ... and at the destination. Each one counts for the miles halfway to its neighbours. With N = 25 on a 60-mile route: mile 0 covers 12.5, mile 25 covers 25, mile 50 covers 17.5, mile 60 covers 5. The covered miles always add up to the route length.
+### 3.4 Miles per checkpoint
 
-### Ranking
+Checkpoints sit at mile 0, N, 2N, ... and at the destination. Each covers the miles halfway to its neighbours, so the covered miles add up to the route length. With N = 25 on a 60-mile route: mile 0 covers 12.5, mile 25 covers 25, mile 50 covers 17.5, mile 60 covers 5. If the destination is less than 1 mile past the last multiple of N, that checkpoint is dropped so the destination is not doubled.
 
-Routes are sorted by this key, smallest first. The first route is recommended.
+### 3.5 Ranking and reason
+
+Routes sort by this key, smallest first, and the first is recommended:
 
 1. No Travel miles (the brief's list skips this level; any No Travel mile is worse than any Severe mile)
 2. Severe miles
 3. High miles
-4. Average risk = Σ(level × covered miles) / route miles, rounded to 0.01 so tiny float gaps do not hide travel time
+4. Average risk = Σ(level × covered miles) / route miles, rounded to 0.01
 5. Travel time
 
-Miles are rounded to 0.1 before comparing. The `reason` names, for each other route, the first key where the winner beats it, for example "Route B: fewer High miles than Route C (150 vs 350); fewer Severe miles than Route A (0 vs 50)."
+Miles are rounded to 0.1 before comparing. The sort is stable, so a full tie keeps the provider's order (TomTom lists its preferred route first).
 
-## 3. Low-level design
+The reason compares the winner with each other route on the first key where it wins, lists the most decisive comparison first, and states the time cost when the safer route is slower. If even the winner has Severe or No Travel miles, it ends with a warning. Example from the fixture at 45,000 lb:
 
+> Route B: fewer Severe miles than Route A (0 vs 50), 11 min slower; fewer High miles than Route C (150 vs 350).
 
-### Modules
+## 4. High-level design
+
+```
+Browser (React + MapLibre)                Django API (1 process, 8 threads)          Outside services
+--------------------------                ---------------------------------          ----------------
+type "Dall" ── GET /api/geocode?q= ──▶    throttle ─ cache (1 day) ─ geocode() ──▶   TomTom Search
+submit form ── POST /api/plan ───────▶    throttle ─ validate ─ plan_trip()
+                                            1. routes()          ──────────────▶     TomTom Routing (truck)
+                                            2. checkpoints + ETAs        (pure)
+                                            3. weather cells, adaptive size (pure)
+                                            4. hourly() ─ cache (30 min) ─────▶     Open-Meteo, batches of 100
+                                            5. classify, summarize, rank (pure)
+                                            6. heatmap: 49 hours per cell (pure)
+cards, map, ◀── PlanResponse (52 KB gzip) ─
+heatmap, slider: no further requests
+```
+
+- **One request per plan.** `/api/plan` returns routes, checkpoints, the recommendation and the whole 49-hour heatmap. The slider never calls the server.
+- **The server owns all keys and all rules.** The browser maps level numbers to names and colours and nothing else.
+- **No database.** A plan is computed from live data in about a second. Weather is cached per grid cell and hour in process memory for 30 minutes, which covers repeat and nearby plans.
+- **Fixture mode.** `ROUTING_PROVIDER=fixture` serves three recorded Dallas to Chicago routes, and `WEATHER_PROVIDER=fixture` serves a scripted moving storm. The e2e suite runs on both, so it is repeatable and needs no key.
+- **One deployable.** One Docker image on Render serves the built React app (WhiteNoise) and the API from one origin, so there is no CORS.
+
+Diagrams: `docs/hld.excalidraw` (components and the request path) and `docs/lld.excalidraw` (plan pipeline and data model), exported as PNG next to them.
+
+## 5. Low-level design
+
+### 5.1 Modules
 
 ```
 backend/
-  config/           settings, urls, wsgi. Serves frontend/dist and /api/*.
-  trips/
-    domain.py       Level, Weather, Checkpoint, Route, RouteSummary, Plan dataclasses. No I/O.
-    rules.py        THRESHOLDS table, classify(weather, load_lb), summarize(checkpoints, distance_mi), rank(routes).
-    geometry.py     haversine, cumulative miles, point_and_time_at(track, mile), corridor_cells(tracks).
-    providers.py    TomTom (geocode, routes), OpenMeteo (hourly), Fixture* twins; get_providers() picks by PROVIDER_MODE.
-    planner.py      plan_trip(request, providers) -> Plan. The only place that calls providers.
-    views.py        parse and validate JSON, call planner, map errors to HTTP codes.
-    fixtures/       recorded routes + storm parameters for fixture mode.
+  config/settings.py   env-driven settings: DEBUG, hosts, cache, logging, security headers, throttle switch
+  config/urls.py       /api/* routes, index.html for app paths, 404 for missing assets
+  trips/domain.py      frozen dataclasses: Place, Weather, Levels, Assessment, RouteOption, Checkpoint,
+                       RouteSummary, Route, HeatmapCell, Heatmap, Plan; aliases TrackPoint, Cell, MilesByLevel
+  trips/rules.py       WIND/RAIN/SNOW_BANDS, LOAD_RULES, classify(weather, load_lb) -> Assessment,
+                       covered_miles(miles, total), summarize(checkpoints, distance_mi), rank(routes)
+  trips/geometry.py    haversine, cumulative_miles, point_and_time_at, thin_track, cell_of, corridor_cells
+  trips/planner.py     plan_trip(request, providers) -> Plan; forecast_index; adaptive weather cells
+  trips/providers.py   TomTom search and routing, Open-Meteo hourly, fixture twins, get_providers()
+  trips/views.py       health, geocode, plan: throttle, validate, call planner, map errors to HTTP
+  trips/fixtures/      recorded routes (re-record with a script, never by hand)
+  scripts/check_fixture.py   asserts the fixture scenarios and the checkpoint/heatmap agreement
 frontend/src/
-  api.ts            fetch wrappers and the TypeScript types below (one copy of the contract).
-  App.tsx           page state: idle | loading | ready | error; selected route; slider hour.
-  TripForm.tsx      place search with autocomplete, departure, load, interval picker.
-  RouteMap.tsx      MapLibre map: heatmap cells, route lines, checkpoint circles, truck markers, popups.
-  RouteCards.tsx    one card per route: time, distance, arrival, miles per level bar, avg risk, recommended badge + reason.
-  CheckpointList.tsx checkpoints of the selected route; clicking one flies the map there and opens its popup.
-  HourSlider.tsx    0–48 h slider showing "+12 h, Thu 18:00".
-e2e/                Playwright tests against Django in fixture mode.
+  api.ts               the one TypeScript copy of the contract in 5.3, fetch wrappers
+  App.tsx              page state, plan header, error banner, lazy map, slider wiring
+  TripForm.tsx         place search (usePlaceSearch hook), departure, cargo, interval; field validation
+  RouteCards.tsx       one card per route: ranking numbers, time, distance, recommended badge and reason
+  CheckpointList.tsx   checkpoints of the selected route; a click focuses the map
+  HourSlider.tsx       0 to maxHour slider labelled "+12 h, Thu 18:00 CST"
+  RouteMap.tsx         react-map-gl wiring, popup, hour updates once per animation frame
+  mapLayers.ts         layer install, plan data, selection, hour, camera
+  planGeoJson.ts       plan -> GeoJSON for heat cells, routes, checkpoints, trucks
+  basemap.ts           dark OpenFreeMap style, pruned and contrast-tuned at load
+  mapHandoff.ts        MapApi and MapPending: how App talks to the lazily loaded map
+  MapUnavailable.tsx   the one map-failure message
+  levels.ts            the only table of level names and colours
+  format.ts            times in the browser's zone, durations, distances
+e2e/                   Playwright, 8 tests against Django in fixture mode
 ```
 
-### API contract
+### 5.2 Data model
 
-All times are ISO 8601 UTC strings. Coordinates are `[lon, lat]`.
-
-`GET /api/geocode?q=dallas` → `200 [{ "label": "Dallas, TX", "lon": -96.79, "lat": 32.77 }]` (up to 5, US only)
-
-`POST /api/plan`
-
-```json
-{
-  "origin": { "label": "Dallas, TX", "lon": -96.797, "lat": 32.777 },
-  "destination": { "label": "Chicago, IL", "lon": -87.630, "lat": 41.878 },
-  "departure": "2026-11-13T12:00:00Z",
-  "load_lb": 45000,
-  "interval_mi": 25
-}
+```
+Plan ── departure, load_lb, interval_mi, recommended_id, reason
+ ├── routes: Route[3]  (ranked, recommended first)
+ │     ├── id "A".."C" (provider order, stable across ranking), name, distance_mi, duration_s, arrival
+ │     ├── track: [lon, lat, seconds after departure][]   (thinned to ≥ 0.2 mi for the response)
+ │     ├── summary: miles_by_level[5], avg_risk, worst
+ │     └── checkpoints: Checkpoint[]
+ │            mile, lon, lat, eta, covers_mi, weather{wind, gust, rain, snow}, levels{wind, rain, snow},
+ │            level, cause
+ └── heatmap: cell_deg, start (departure floored to the hour), cells[{lon, lat, levels[49]}]
 ```
 
-Validation (400 with `{ "error": "..." }`): interval in {10, 25, 50}; cargo load 1 to 45,000 lb (US legal max gross is 80,000, minus the 35,000 lb tare added for TomTom); departure from now minus 1 hour to now plus 14 days; origin and destination at least 1 mile apart. TomTom finding no route gives 422. An outside service failing gives 502 with a plain message.
+All dataclasses are frozen. A `Route` is built once with its real summary; nothing is mutated after construction.
 
-Response `200`:
+### 5.3 API contract
+
+All times are ISO 8601 UTC. Coordinates are `[lon, lat]`. Errors are `{ "error": "<plain sentence>" }`.
+
+| Endpoint | Success | Errors |
+|---|---|---|
+| `GET /api/health` | `200 {"ok": true}` | none |
+| `GET /api/geocode?q=dal` | `200 [{label, lon, lat}]`, up to 5, US only; `[]` for under 2 characters | 429 throttle, 502 provider |
+| `POST /api/plan` | `200 PlanResponse` | 400 validation, 422 no route, 429 throttle, 502 provider |
+
+Validation (400): body is a JSON object; origin and destination have a label and valid coordinates and are at least 1 mile apart; departure has a time zone and is between 1 hour ago and 12 days ahead; cargo is a whole number from 1 to 45,000 lb (80,000 lb legal gross minus the 35,000 lb tare added for routing); interval is 10, 25 or 50. Messages are user-facing, for example "Cargo weight must be between 1 and 45,000 lb."
 
 ```ts
 type Level = 0 | 1 | 2 | 3 | 4;              // LOW, MODERATE, HIGH, SEVERE, NO_TRAVEL
 
+interface PlanRequest {
+  origin: Place; destination: Place;         // Place = { label: string; lon: number; lat: number }
+  departure: string; load_lb: number; interval_mi: 10 | 25 | 50;
+}
+
 interface PlanResponse {
-  departure: string;
+  departure: string;                          // exactly as requested
   load_lb: number;
   interval_mi: 10 | 25 | 50;
-  recommended_id: string;                     // "A" | "B" | "C"
+  recommended_id: string;
   reason: string;
-  routes: Route[];                            // in ranking order, recommended first
+  routes: Route[];                            // ranking order
   heatmap: Heatmap;
 }
 
 interface Route {
-  id: string;                                 // letter by TomTom order, stable across reranking
-  name: string;                               // main roads, e.g. "I-35 N, I-44 E"
-  distance_mi: number;
-  duration_s: number;
-  arrival: string;
-  track: [number, number, number][];          // [lon, lat, seconds after departure], thinned to ≥ 0.2 mi spacing
+  id: string; name: string; distance_mi: number; duration_s: number; arrival: string;
+  track: [number, number, number][];          // [lon, lat, seconds after departure]
   checkpoints: Checkpoint[];
-  summary: {
-    miles_by_level: [number, number, number, number, number];  // index = Level
-    avg_risk: number;
-    worst: Level;
-  };
+  summary: { miles_by_level: [number, number, number, number, number]; avg_risk: number; worst: Level };
 }
 
 interface Checkpoint {
-  mile: number;
-  lon: number;
-  lat: number;
-  eta: string;
-  covers_mi: number;
+  mile: number; lon: number; lat: number; eta: string; covers_mi: number;
   weather: { wind_mph: number; gust_mph: number; rain_in_hr: number; snow_in_hr: number };
   levels: { wind: Level; rain: Level; snow: Level };
   level: Level;
-  cause: string;
+  cause: string;                              // "no condition above Low" when level is 0
 }
 
 interface Heatmap {
-  cell_deg: number;                           // 0.25
-  start: string;                              // = departure; hour h is start + h hours
-  cells: { lon: number; lat: number; levels: Level[] }[];  // cell centre, 49 levels for h = 0..48
+  cell_deg: number;                           // 0.25, 0.5 or 1.0 (section 5.4.4)
+  start: string;                              // departure floored to the whole UTC hour
+  cells: { lon: number; lat: number; levels: Level[] }[];   // levels[h] is start + h hours, h = 0..48
 }
 ```
 
-### Plan pipeline (planner.py)
+### 5.4 Plan pipeline (`planner.plan_trip`)
 
-1. `providers.routes(origin, destination, departure, load_lb)` → up to 3 tracks. TomTom call: `travelMode=truck`, `vehicleCommercial=true`, `vehicleWeight` = (load + 35,000 lb tare) in kg, `maxAlternatives=2`, `alternativeType=anyRoute`, `departAt`, `instructionsType=coded`. Seconds at each point come from interpolating the guidance instructions' `(routeOffsetInMeters, travelTimeInSeconds)` pairs along the polyline, so slow stretches get later ETAs.
-2. For each route: checkpoints at mile 0, N, 2N, ..., destination. `point_and_time_at` interpolates position and seconds; `eta = departure + seconds`.
-3. Snap every checkpoint and every corridor cell to the 0.25° grid. Corridor cells are grid cells whose centre is within 15 miles of any route's track (about 280 cells for Dallas to Chicago, under Open-Meteo's 600 locations a minute). Chunks of 100 are fetched in parallel.
-4. `providers.hourly(cells, start, end)`: one Open-Meteo batch (chunks of 100 locations), `start` = departure hour, `end` = max(departure + 48 h, latest arrival + 1 h). Variables `wind_speed_10m, wind_gusts_10m, rain, showers, snowfall`, `wind_speed_unit=mph`, `precipitation_unit=inch`, `timezone=GMT`. Cached per (cell, hour).
-5. Each checkpoint reads its cell at the hour nearest its ETA. Each heatmap cell is classified for hours 0..48 with the same `classify` and the same load, so a checkpoint and the heatmap cell under it always show the same level at the same hour.
-6. `summarize` each route, `rank`, build `reason`.
+```
+options      = providers.routes(origin, destination, departure, load_lb)[:3]      # NoRouteError -> 422
+start_hour   = floor_to_hour(departure)
+forecast_end = max(start_hour + 48 h, latest arrival + 1 h), rounded up to the hour
+for each option (id A, B, C in provider order):
+    cumulative = cumulative_miles(full track)
+    miles      = checkpoint_miles(total, interval)            # 5.4.1
+    points     = [point_and_time_at(track, cumulative, m) for m in miles]   # 5.4.2
+    covers     = covered_miles(miles, total)                  # section 3.4
+cell_deg, cells = weather_cells(tracks, all checkpoint points) # 5.4.4
+hourly          = providers.hourly(cells, start_hour, forecast_end)   # one series per cell
+for each checkpoint: weather = hourly[cell_of(point)][forecast_index(eta)]; assessment = classify(weather, load)
+for each route: Route(..., track = thin_track(track), summary = summarize(checkpoints, total))
+for each cell, h in 0..48: level = classify(hourly[cell][h], load).level
+ranked, reason = rank(routes)
+```
 
-### Front end rendering
+#### 5.4.1 Checkpoint placement
 
-- Dark theme only, on OpenFreeMap's dark basemap with buildings, land use and minor roads removed at load.
-- Map layers, bottom to top: heatmap cells (fill), route lines (non-selected grey, selected blue and thicker), checkpoint circles coloured by level, truck markers.
-- The slider sets `fill-color` to read property `r{h}` from each cell. The cell GeoJSON is built once per plan with properties `r0..r48`, so a slider move is one paint-property change with no new data.
-- Truck markers: position of each route's truck at departure + h hours, from `track` (binary search on seconds). Hidden once a truck has arrived.
-- Level colours: Low green, Moderate yellow, High orange, Severe red, No Travel purple, lightened to read on dark. They are the same in the map, cards, list and legend.
-- Times show in the browser's time zone with its abbreviation.
-- The map code loads lazily, so the form appears before the 300 KB map library arrives. API responses are gzipped (plan: 268 KB raw, 59 KB sent).
+```
+miles = [0]; m = N
+while m < total - 1: miles.append(m); m += N
+miles.append(total)
+```
 
-## 4. Assumptions
+#### 5.4.2 ETA along a route
+
+TomTom returns the polyline and guidance instructions with `(routeOffsetInMeters, travelTimeInSeconds)`. Offsets are scaled to the polyline's own length, then each polyline point gets a time by linear interpolation between the surrounding instructions, so slow stretches (cities, climbs) get later ETAs than a constant speed would. `point_and_time_at(track, cumulative, mile)` binary-searches the cumulative miles and interpolates position and seconds between two track points. `eta = departure + seconds`. The last point's time equals TomTom's total travel time exactly.
+
+#### 5.4.3 Which forecast hour
+
+```
+forecast_index(t) = floor((t - start_hour) / 1 h + 0.5)      # nearest hour, a tie goes to the later hour
+```
+
+Python's `round()` rounds halves to even and would map a 12:30 departure to hours 0, 2, 2, 4, 4 and skip every other hour, so it is not used. The heatmap reads index `h` directly for slider hour `h`, because `heatmap.start = start_hour`. The result: a checkpoint shows exactly the level of its cell at the slider hour nearest its ETA. `check_fixture.py` and the e2e suite both assert this for a :30 departure.
+
+#### 5.4.4 Corridor cells and adaptive size
+
+A cell is a square of `cell_deg` degrees, identified by its centre `cell_of(lon, lat) = (round(lon / d) * d, round(lat / d) * d)`. The corridor is every cell whose centre is within 15 miles of any track point. The longitude search width scales with `1 / cos(latitude)` so no cell is missed in the north. Checkpoint cells the corridor misses are added.
+
+Open-Meteo counts every location against 600 a minute, so a plan must stay well under that:
+
+```
+for d in (0.25, 0.5, 1.0):
+    cells = corridor(tracks, d) ∪ checkpoint cells
+    if len(cells) ≤ 450: return d, cells
+return 1.0, cells                                           # provider will report its limit if hit
+```
+
+Dallas to Chicago uses 0.25° and 279 cells. A New York to Los Angeles plan with three diverging routes needs 904 cells at 0.25° and uses 0.5° with 224.
+
+### 5.5 Providers
+
+| Call | Request | Notes |
+|---|---|---|
+| TomTom routing | `travelMode=truck`, `vehicleCommercial=true`, `vehicleWeight` = (cargo + 35,000 lb) in kg, `maxAlternatives=2`, `alternativeType=anyRoute`, `departAt` = max(departure, now + 1 min), `instructionsType=coded` | HTTP 400 means no route for this truck: `NoRouteError`, 422 |
+| TomTom search | `countrySet=US`, `typeahead=true`, `limit=5`, `idxSet=Geo,PAD` | cached 1 day per query |
+| Open-Meteo | `hourly=wind_speed_10m,wind_gusts_10m,rain,showers,snowfall`, mph and inch, GMT, `start_hour`/`end_hour`, 100 locations per request, up to 4 requests in parallel | nulls take the nearest valid hour; a series that does not cover the requested hours is an error, never padded |
+
+Route names are the two roads with the most distance on the route, made distinct across the three routes.
+
+### 5.6 Front end rendering
+
+- Dark theme only, OpenFreeMap's dark style with buildings, land use, minor roads and rail removed at load, and labels lifted for contrast.
+- The map code is a separate chunk loaded with `React.lazy`, so the form paints before MapLibre (about 300 KB gzip plus a 148 KB gzip worker) arrives. Main bundle: about 52 KB gzip. Hashed assets are served as immutable.
+- Layers, bottom to top, all under the basemap labels: heat cells (fill), route lines (others grey, selected blue and wider), checkpoint circles coloured by level, trucks.
+- **Slider path.** GeoJSON for a plan is built once. Each heat cell has a numeric feature id, and `fill-color` reads `["feature-state", "level"]` (transparent when unset). A slider move, coalesced to one per animation frame, sets one feature state per cell and replaces the three-point truck source. It never changes the style. A data-driven paint expression (`match` on `r{h}`) was the first version; MapLibre reloads the source on every change of such a property (1 reload and 6 `sourcedata` events per move). `global-state` was tried and rejected because combined with per-cell data it still reloads. Measured with a 4x CPU throttle on 279 cells: 0 reloads per move, frame p50 30.3 ms and p95 32.6 ms (was 30.6 and 34.3), feature-state writes 0.1 ms p95.
+- Trucks show each route's position at `heatmap.start + h hours`: at the origin before departure, hidden after arrival.
+- The lazily loaded map receives input made before it finished loading (hour, focused checkpoint) through `MapPending`, and drops a focus that belongs to an older plan.
+- Level colours come from `levels.ts` only and match across map, cards, list and legend. Times show in the browser's time zone with its abbreviation.
+- Failures: a missing WebGL context, a failed map chunk or a failed basemap style all show one message, and the form and cards keep working.
+
+## 6. Capacity and quotas
+
+| Resource | Free limit | Cost per plan | Plans before the limit |
+|---|---|---|---|
+| Open-Meteo, per minute | 600 locations | 279 (Dallas to Chicago, cold cache) | 2 a minute |
+| Open-Meteo, per hour | 5,000 locations | 279 | about 17 an hour |
+| Open-Meteo, per day | 10,000 locations | 279 | about 35 a day cold; repeats within 30 min are free |
+| TomTom, per day | 2,500 requests | 1 routing + about 10 search keystrokes (debounced, cached a day) | about 225 a day |
+| Render free instance | 512 MB, 0.1 CPU | about 85 ms CPU per plan in fixture mode | not the bottleneck |
+
+Open-Meteo is the binding limit by roughly 6x over TomTom. Our own throttle (6 plans a minute per client) stops one client from using a whole minute's weather budget. The weather cache holds about 14,000 entries for one Dallas to Chicago plan (279 cells x 50 hours).
+
+## 7. Failure modes
+
+| Failure | Detection | Behaviour | What the user sees |
+|---|---|---|---|
+| TomTom has no route (HTTP 400) | status code | 422 | "No truck route was found between these places." |
+| TomTom or Open-Meteo down, 5xx or timeout (15 s) | exception | 502, logged with service, status, elapsed | "The ... service is unavailable right now." |
+| Provider rate limit (429) | status code | 502, logged | "The ... service is over its request limit. Try again later." |
+| Open-Meteo returns nulls | parse | nearest valid hour used; all-null series is a 502 | normal plan, or "returned incomplete data" |
+| Open-Meteo returns the wrong hours | parse | 502, nothing cached | "returned an unexpected response" |
+| Our throttle hit | cache counter | 429 with `Retry-After: 60` | "Too many requests. Wait a minute and try again." |
+| Bad input | validation | 400 | field message in the form; server message as a fallback |
+| Plan takes over 30 s | browser timeout | request aborted | "Planning took too long. Try again." with the form still usable |
+| A newer plan is requested | browser | older request aborted, its result ignored | only the newest plan shows |
+| Replan fails after a good plan | browser | old results stay | banner says the results below are from the previous plan |
+| WebGL missing, map chunk or basemap fails | map events, error boundary | map replaced by a message | routes and checkpoints still listed |
+
+## 8. Caching and concurrency
+
+- Gunicorn runs one process with 8 threads. One process means one in-memory cache, so a repeat plan always finds its weather (two processes would miss about half the time).
+- Weather: key `weather:{lon:.2f}:{lat:.2f}:{UTC hour}`, TTL 30 minutes. A plan reads its cells and hours from the cache and fetches only the missing cells, in batches of 100 with up to 4 in parallel. Django's local-memory cache is thread-safe.
+- Geocode: key by lower-cased query, TTL 1 day.
+- Throttle counters: `throttle:{scope}:{client}`, 60-second window.
+- Nothing is invalidated by hand. Forecasts change hourly at most, so 30 minutes bounds staleness.
+
+## 9. Security and abuse
+
+- `TOMTOM_API_KEY` lives only in the server's environment (`backend/.env` locally, ignored by git; a Render secret in production). The browser never sees it.
+- Provider failures are logged as service, status and elapsed time, and re-raised without the original exception chained, so a request URL containing `?key=` can never reach a log or a traceback.
+- Per-client throttles: `/api/plan` 6 a minute, `/api/geocode` 60 a minute. The client is the first `X-Forwarded-For` entry behind Render's proxy. That header can be forged, so this is a cost guard, not a security boundary.
+- Input: JSON object only, strict types, ranges in 5.3, query length capped at 100 characters, deeply nested JSON rejected.
+- Headers: HSTS (no preload), `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, `X-Frame-Options: DENY`. There are no cookies or sessions, so CSRF protection does not apply.
+- The container runs as a non-root user.
+
+## 10. Observability
+
+- Logs go to stdout and Render's log stream. Each plan logs `routes`, `cells`, `cell_deg` and `elapsed_ms`, without places. Each provider failure logs service, HTTP status and elapsed time. Gunicorn writes an access log.
+- What we would alert on with a log-based monitor: provider error rate over 5% in 10 minutes, any Open-Meteo 429, plan p95 over 5 s, and the keep-warm ping failing.
+- `/api/health` is the Render health check and the keep-warm target.
+
+## 11. Deployment and rollback
+
+- One Docker image: Node 22 builds the front end, Python 3.13 with uv installs locked dependencies, Gunicorn serves Django, WhiteNoise serves the built files.
+- Render builds from `render.yaml` on push to `main`, checks `/api/health`, and only then switches traffic.
+- Rollback: redeploy the previous successful deploy from Render's dashboard. There is no database or migration, so rollback is always safe.
+- A GitHub Action pings `/api/health` every 10 minutes so the free instance does not sleep.
+
+## 12. Testing
+
+| Layer | What | Command |
+|---|---|---|
+| Static | ruff, ty (Python types), tsc strict | see AGENTS.md |
+| Rules on real fixtures | `check_fixture.py`: expected recommendations at 20,000 and 45,000 lb, covered miles add up, every checkpoint matches its heatmap cell | `uv run python scripts/check_fixture.py` |
+| End to end, UI | three routes and one recommendation; a heavier load changes it; interval spacing and ETA order; slider repaints with no request; past departure shows a field message | `cd e2e && npm test` |
+| End to end, API | interval validation; the 40,000 vs 40,001 lb load edge with the exact reason; checkpoint placement, coverage and heatmap agreement for a :30 departure | same |
+| Performance | slider sweep and plan-to-idle under 4x CPU throttle | Playwright scripts, run by hand |
+
+There are no unit tests by choice: the e2e suite runs the real rules on recorded routes and a scripted storm, so a wrong band edge, a wrong ranking or a miscounted mile fails a test.
+
+## 13. Alternatives considered
+
+| Decision | Chosen | Rejected | Why |
+|---|---|---|---|
+| Heatmap shape | Grid of cells in one GeoJSON source | Raster or vector tiles per hour | 279 cells is tiny; tiles need a tile server and a request per hour |
+| Heatmap delivery | All 49 hours in the plan response | Fetch each hour as the slider moves | Sliding must not wait on the network; 49 levels per cell gzip to almost nothing |
+| Slider repaint | Feature state per cell | Data-driven paint per hour; 49 layers toggled; `global-state` | The first reloads the source on every move; 49 layers cost 49x buckets; global-state cannot index per-cell data without a reload |
+| Routing | TomTom (truck profile, weight, traffic-aware times, alternatives) | OSRM (no truck profile), Google (no truck routing), HERE (similar, smaller free tier) | Truck weight changes the route and the times |
+| Weather | Open-Meteo (free, batch of 100 locations, hourly to 16 days) | NWS (US only, one gridpoint per call, no batch), Tomorrow.io (key, low free limits) | One request covers 100 cells |
+| Storage | None, in-process cache | Postgres or Redis | Every plan is computed from live data; nothing needs to persist; one process |
+| Hosting | Render, one Docker image | A VM | No server to patch; health checks and rollback built in |
+| Corridor size control | Adaptive cell size | Fixed size with a trip length cap | Long trips still work, with a coarser heatmap |
+
+## 14. Scaling path (100x traffic)
+
+1. Weather becomes the cost: move the cache to Redis shared by all instances, keyed the same way, and pay for Open-Meteo or self-host it (it is open source).
+2. Past a few hundred plans an hour, fetch the whole US grid once an hour in a background job (about 25,000 cells at 0.25°) and stop calling the weather API per request. Plans then read only from Redis.
+3. Run several web instances behind the load balancer; nothing in a request depends on local state once the cache is shared. Move the throttle to Redis as well.
+4. Serve static assets from a CDN; ship heatmap cells as a compact array instead of GeoJSON-shaped objects (they are already a small part of the payload; tracks are the largest part).
+5. TomTom then needs a paid plan; route results can be cached for a few minutes per origin, destination, weight bucket and departure hour.
+
+## 15. Assumptions, risks and open questions
+
+Assumptions:
 
 1. ETAs use TomTom truck travel times and ignore driver rest breaks.
 2. Wind means sustained wind at 10 m. Gusts are shown but not scored.
-3. Weather comes from the hourly forecast hour nearest each ETA.
-4. Heatmap hour 0 is the departure time, so the slider lines up with the ETAs.
-5. TomTom routes for gross weight = load + 35,000 lb (a typical empty tractor-trailer). The risk rules use the load alone, as the brief states them.
-6. Weather values are rounded (wind to 0.1 mph, rain and snow to 0.01 in/hr) before classifying, so the number shown always matches the level.
-7. Routes are US only (the load rules are in pounds and the sample trips are US).
+3. Weather comes from the forecast hour nearest each ETA.
+4. Heatmap hour 0 is the departure's whole hour (12:00 for a 12:30 departure), so every slider step is a real forecast hour.
+5. TomTom routes for gross weight = cargo + 35,000 lb (a typical empty tractor-trailer). The risk rules use cargo alone, as the brief states them.
+6. Routes are US only.
+
+Risks:
+
+- TomTom has not been exercised live yet; the fixture routes were recorded from OSRM as a stand-in, so the fixture's distances (964.2 mi) are measured on a thinned recording and run slightly short. Re-record with TomTom once the key is set.
+- Open-Meteo's free tier is for non-commercial use. A commercial launch needs its paid plan.
+- The throttle trusts `X-Forwarded-For`, which a client can forge.
+
+Open questions for Spotter:
+
+- Should driver hours of service shift ETAs (a 10-hour break changes which hour a checkpoint sees)?
+- Should gusts count, for example a gust rule for high-sided empty trailers?
+- Is "fewest No Travel miles first" the right reading of the brief's ranking list, which does not mention No Travel?

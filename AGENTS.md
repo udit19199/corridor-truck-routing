@@ -24,9 +24,10 @@ Weather-aware truck routing: Django API (`backend/`) plus React + MapLibre UI (`
 
 ## Rules
 
-- Risk thresholds, load rules and level names live only in `backend/trips/rules.py`. The front end gets levels as numbers and maps them to names and colours in one table. Never copy thresholds into the front end.
+- Risk thresholds and load rules live only in `backend/trips/rules.py`. The API sends levels as numbers; the front end maps them to names and colours only in `frontend/src/levels.ts`. Never copy thresholds into the front end.
 - Never put an API key in code, fixtures, logs or the browser bundle. Keys come from env vars; `backend/.env` is ignored by git.
 - Never commit `brief/`. It holds Spotter's assignment document.
 - Never add unit tests. Coverage comes from the Playwright tests in `e2e/`, which run against fixture providers.
-- The heatmap slider must not trigger a network request or rebuild GeoJSON. It changes one paint property. Keep it that way.
+- The heatmap slider must not trigger a network request, rebuild the heat GeoJSON or change the style. A move sets one feature state per heat cell and replaces the three-point truck source (see DESIGN.md 5.6). Keep it that way.
+- Never let an agent run React Doctor in parallel with builds, servers or browsers; it has used over 70 GB of memory on this machine. Run it alone with `--no-parallel`.
 - Fixture data in `backend/trips/fixtures/` is recorded. Re-record it with a script; do not hand-edit coordinates.
