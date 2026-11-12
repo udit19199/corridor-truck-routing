@@ -6,6 +6,7 @@ from typing import TypeIs
 
 from django.conf import settings
 from django.core.cache import cache
+from django.core.exceptions import RequestDataTooBig
 from django.http import HttpRequest, JsonResponse
 from django.views.decorators.http import require_GET, require_POST
 
@@ -62,6 +63,8 @@ def plan(request: HttpRequest) -> JsonResponse:
 
     try:
         payload = json.loads(request.body)
+    except RequestDataTooBig:
+        return _error("Request body is too large.", 413)
     except (json.JSONDecodeError, UnicodeDecodeError, RecursionError):
         return _error("Request body must be valid JSON.", 400)
     if not isinstance(payload, dict):
