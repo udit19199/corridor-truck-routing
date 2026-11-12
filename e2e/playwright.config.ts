@@ -14,6 +14,6 @@ export default defineConfig({
     url: "http://127.0.0.1:8765/api/health",
     timeout: 180_000,
     reuseExistingServer: false,
-    env: { ROUTING_PROVIDER: "fixture", WEATHER_PROVIDER: "fixture", DEBUG: "true" },
+    env: { ROUTING_PROVIDER: "fixture", WEATHER_PROVIDER: "fixture", DEBUG: "true", THROTTLE_ENABLED: "false" },
   },
 });

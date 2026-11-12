@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from bisect import bisect_right
 from collections import Counter
@@ -9,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 from functools import cache
 from math import cos, exp, hypot, radians
 from pathlib import Path
+from time import monotonic
 from typing import Any
 from urllib.parse import quote
 
@@ -19,6 +21,8 @@ from django.core.cache import cache as weather_cache
 from trips.domain import Cell, Place, RouteOption, TrackPoint, Weather
 from trips.geometry import haversine
 
+logger = logging.getLogger(__name__)
+
 # Raw JSON from outside services; each use checks the shape it needs.
 Json = Any
 
@@ -27,10 +31,11 @@ TOMTOM_SEARCH_URL = "https://api.tomtom.com/search/2/search/{query}.json"
 TOMTOM_ROUTE_URL = "https://api.tomtom.com/routing/1/calculateRoute/{origin}:{destination}/json"
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
 WEATHER_CACHE_SECONDS = 30 * 60
-MIN_TRACK_SPACING_MI = 0.2
+OPENMETEO_FIELDS = ("wind_speed_10m", "wind_gusts_10m", "rain", "showers", "snowfall")
 # TomTom wants gross vehicle weight; the form asks for cargo.
 # 35,000 lb is a typical empty tractor-trailer.
 TRUCK_TARE_LB = 35_000
+NO_ROUTE_MESSAGE = "No truck route was found between these places."
 FIXTURE_CITIES = [
     Place("Dallas, TX", -96.7970, 32.7767),
     Place("Chicago, IL", -87.6298, 41.8781),
@@ -49,6 +54,9 @@ class ProviderError(Exception):
 
 class NoRouteError(Exception):
     """The routing service knows no route between the two places."""
+
+    def __init__(self, message: str = NO_ROUTE_MESSAGE) -> None:
+        super().__init__(message)
 
 
 @dataclass(frozen=True)
@@ -71,9 +79,7 @@ def _fixture_routes() -> list[RouteOption]:
         RouteOption(
             name=str(route["name"]),
             duration_s=int(route["track"][-1][2]),
-            track=_thin_track(
-                [(float(lon), float(lat), int(seconds)) for lon, lat, seconds in route["track"]]
-            ),
+            track=[(float(lon), float(lat), int(seconds)) for lon, lat, seconds in route["track"]],
         )
         for route in data["routes"]
     ]
@@ -178,6 +184,9 @@ def _tomtom_geocode(query: str) -> list[Place]:
 def _tomtom_routes(
     origin: Place, destination: Place, departure: datetime, load_lb: int
 ) -> list[RouteOption]:
+    # TomTom rejects a departure in the past, so a departure up to 1 hour ago starts
+    # at the next minute. ETAs still count from the departure the user chose.
+    depart_at = max(departure, datetime.now(UTC) + timedelta(minutes=1))
     data = _get_json(
         TOMTOM_ROUTE_URL.format(
             origin=f"{origin.lat},{origin.lon}", destination=f"{destination.lat},{destination.lon}"
@@ -189,38 +198,76 @@ def _tomtom_routes(
             "vehicleWeight": round((load_lb + TRUCK_TARE_LB) * 0.45359237),
             "maxAlternatives": 2,
             "alternativeType": "anyRoute",
-            "departAt": departure.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "departAt": depart_at.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "instructionsType": "coded",
         },
         "The TomTom routing service",
+        # TomTom reports points it cannot connect as a 400, not as an empty route list.
+        no_route_statuses=frozenset({400}),
     )
     options = []
     if not isinstance(data, dict):
         raise ProviderError("The TomTom routing service returned an unexpected response.")
+    taken_names: set[str] = set()
     for route in (data.get("routes") or [])[:3]:
         track = _tomtom_track(route)
         summary = route.get("summary") or {}
         if len(track) < 2 or not summary.get("travelTimeInSeconds"):
             continue
+        name = _route_name(_roads_by_distance(route), taken_names)
+        if name in taken_names:
+            name = f"Route {'ABC'[len(options)]}"
+        taken_names.add(name)
         options.append(
             RouteOption(
-                name=_route_name(route),
+                name=name,
                 duration_s=int(summary["travelTimeInSeconds"]),
                 track=track,
             )
         )
     if not options:
-        raise NoRouteError("No route was found between these places.")
+        raise NoRouteError()
     return options
 
 
-def _route_name(route: dict[str, Json]) -> str:
-    numbers: list[str] = []
-    for instruction in (route.get("guidance") or {}).get("instructions") or []:
-        numbers.extend(instruction.get("roadNumbers") or [])
-    if not numbers:
+def _roads_by_distance(route: dict[str, Json]) -> list[str]:
+    """Road numbers ranked by the distance driven on them, from TomTom's guidance."""
+    instructions = (route.get("guidance") or {}).get("instructions") or []
+    metres: dict[str, float] = {}
+    for index, instruction in enumerate(instructions):
+        start = instruction.get("routeOffsetInMeters")
+        following = (
+            instructions[index + 1].get("routeOffsetInMeters")
+            if index + 1 < len(instructions)
+            else None
+        )
+        stretch_m = (
+            float(following) - float(start) if start is not None and following is not None else 0.0
+        )
+        for number in instruction.get("roadNumbers") or []:
+            metres[str(number)] = metres.get(str(number), 0.0) + stretch_m
+    if not any(metres.values()):
+        # Guidance without usable offsets: fall back to counting instructions.
+        counts: Counter[str] = Counter(
+            str(number)
+            for instruction in instructions
+            for number in instruction.get("roadNumbers") or []
+        )
+        return [number for number, _count in counts.most_common()]
+    return sorted(metres, key=lambda number: metres[number], reverse=True)
+
+
+def _route_name(roads: list[str], taken_names: set[str]) -> str:
+    if not roads:
         return "Unnamed roads"
-    return ", ".join(number for number, _count in Counter(numbers).most_common(2))
+    # Two roads are the usual name. Add the next road when another route already
+    # uses the same name, so the three cards stay distinct.
+    depth = 2
+    name = ", ".join(roads[:depth])
+    while name in taken_names and depth < len(roads):
+        depth += 1
+        name = ", ".join(roads[:depth])
+    return name
 
 
 def _tomtom_track(route: dict[str, Json]) -> list[TrackPoint]:
@@ -242,23 +289,27 @@ def _tomtom_track(route: dict[str, Json]) -> list[TrackPoint]:
     length = distance_m[-1]
     summary = route.get("summary") or {}
     total_time = float(summary.get("travelTimeInSeconds") or 0)
-    offsets, times = _instruction_marks(route.get("guidance") or {}, length, total_time)
+    reported_m = float(summary.get("lengthInMeters") or 0)
+    # Guidance offsets measure TomTom's road length, the track measures the polyline.
+    # Scale one to the other so the destination lands exactly on travelTimeInSeconds.
+    scale = length / reported_m if reported_m > 0 else 1.0
+    offsets, times = _instruction_marks(route.get("guidance") or {}, length, total_time, scale)
 
     track = []
     for (lon, lat), distance in zip(points, distance_m, strict=False):
         track.append((lon, lat, round(_time_at(offsets, times, distance))))
-    return _thin_track(track)
+    return track
 
 
 def _instruction_marks(
-    guidance: dict[str, Json], length_m: float, total_time: float
+    guidance: dict[str, Json], length_m: float, total_time: float, scale: float
 ) -> tuple[list[float], list[float]]:
     pairs = []
     for instruction in guidance.get("instructions") or []:
         offset = instruction.get("routeOffsetInMeters")
         seconds = instruction.get("travelTimeInSeconds")
         if offset is not None and seconds is not None:
-            pairs.append((float(offset), float(seconds)))
+            pairs.append((float(offset) * scale, float(seconds)))
     pairs.sort()
 
     offsets, times = [0.0], [0.0]
@@ -343,32 +394,53 @@ def _fetch_openmeteo(cells: list[Cell], start: datetime, hours: int) -> dict[Cel
             raise ProviderError("The weather service returned an unexpected response.")
         hourly = item.get("hourly") or {}
         times = hourly.get("time") or []
-        fields = {
-            name: hourly.get(name) or []
-            for name in ("wind_speed_10m", "wind_gusts_10m", "rain", "showers", "snowfall")
-        }
+        fields = {name: hourly.get(name) or [] for name in OPENMETEO_FIELDS}
         if not times or any(len(values) != len(times) for values in fields.values()):
             raise ProviderError("The weather service returned an unexpected response.")
 
         first = datetime.fromisoformat(times[0]).replace(tzinfo=UTC)
-        offset = round((start - first).total_seconds() / 3600)
-        values = []
+        if first != start or len(times) != hours:
+            # Padding or shifting the series would cache a value under the wrong hour.
+            raise ProviderError("The weather service returned an unexpected response.")
+
+        series = {name: _fill_gaps(fields[name]) for name in OPENMETEO_FIELDS}
+        wind = series["wind_speed_10m"]
+        rain = series["rain"]
+        showers = series["showers"]
+        snow = series["snowfall"]
+        gust = series["wind_gusts_10m"] or wind
+        if wind is None or rain is None or showers is None or snow is None or gust is None:
+            raise ProviderError("The weather service returned incomplete data.")
+
+        forecast = []
         for hour in range(hours):
-            index = min(max(offset + hour, 0), len(times) - 1)
             weather = Weather(
-                wind_mph=float(fields["wind_speed_10m"][index]),
-                gust_mph=float(fields["wind_gusts_10m"][index]),
-                rain_in_hr=float(fields["rain"][index]) + float(fields["showers"][index]),
-                snow_in_hr=float(fields["snowfall"][index]),
+                wind_mph=wind[hour],
+                gust_mph=gust[hour],
+                rain_in_hr=rain[hour] + showers[hour],
+                snow_in_hr=snow[hour],
             )
-            values.append(weather)
+            forecast.append(weather)
             weather_cache.set(
                 _cache_key(cell, start + timedelta(hours=hour)),
                 weather,
                 WEATHER_CACHE_SECONDS,
             )
-        result[cell] = values
+        result[cell] = forecast
     return result
+
+
+def _fill_gaps(readings: list[Json]) -> list[float] | None:
+    """Replace nulls with the nearest hour that has a reading. None if every hour is null."""
+    known = [index for index, reading in enumerate(readings) if reading is not None]
+    if not known:
+        return None
+    return [
+        float(reading)
+        if reading is not None
+        else float(readings[min(known, key=lambda other, index=index: abs(other - index))])
+        for index, reading in enumerate(readings)
+    ]
 
 
 def _cache_key(cell: Cell, when: datetime) -> str:
@@ -378,22 +450,44 @@ def _cache_key(cell: Cell, when: datetime) -> str:
 # -- Shared -----------------------------------------------------------------------
 
 
-def _get_json(url: str, params: dict[str, str | int], service: str) -> Json:
+def _get_json(
+    url: str,
+    params: dict[str, str | int],
+    service: str,
+    no_route_statuses: frozenset[int] = frozenset(),
+) -> Json:
     timeout = getattr(settings, "PROVIDER_TIMEOUT_S", 15)
+    started = monotonic()
     try:
         response = requests.get(url, params=params, timeout=timeout)
-        response.raise_for_status()
+    except requests.RequestException:
+        _log_failure(service, None, started)
+        raise ProviderError(f"{service} is unavailable right now.") from None
+
+    status = response.status_code
+    if status >= 400:
+        _log_failure(service, status, started)
+        if status in no_route_statuses:
+            raise NoRouteError() from None
+        if status == 429:
+            raise ProviderError(f"{service} is over its request limit. Try again later.") from None
+        raise ProviderError(f"{service} is unavailable right now.") from None
+
+    try:
         return response.json()
-    except ValueError as exc:
-        raise ProviderError(f"{service} returned an unreadable response.") from exc
-    except requests.HTTPError as exc:
-        if exc.response is not None and exc.response.status_code == 429:
-            raise ProviderError(
-                f"{service} rate limit was reached. Try again in a minute."
-            ) from exc
-        raise ProviderError(f"{service} is unavailable right now.") from exc
-    except requests.RequestException as exc:
-        raise ProviderError(f"{service} is unavailable right now.") from exc
+    except ValueError:
+        _log_failure(service, status, started)
+        raise ProviderError(f"{service} returned an unreadable response.") from None
+
+
+def _log_failure(service: str, status: int | None, started: float) -> None:
+    """Log a failure by service and status. The URL carries the API key, so never log it."""
+    logger.warning(
+        "provider failure service=%s status=%s elapsed_ms=%d",
+        service,
+        status if status is not None else "none",
+        round((monotonic() - started) * 1000),
+    )
 
 
 def _on_hour(value: datetime) -> datetime:
@@ -403,27 +497,6 @@ def _on_hour(value: datetime) -> datetime:
 def _chunks[T](items: list[T], size: int) -> Iterator[list[T]]:
     for start in range(0, len(items), size):
         yield items[start : start + size]
-
-
-def _thin_track(track: list[TrackPoint]) -> list[TrackPoint]:
-    """Keep points at least 0.2 mi apart; the destination always stays."""
-    if len(track) < 2:
-        return track
-
-    cumulative = [0.0]
-    for previous, point in zip(track, track[1:], strict=False):
-        cumulative.append(cumulative[-1] + haversine(previous[0], previous[1], point[0], point[1]))
-
-    kept = [0]
-    for index in range(1, len(track)):
-        if cumulative[index] - cumulative[kept[-1]] >= MIN_TRACK_SPACING_MI:
-            kept.append(index)
-    if kept[-1] != len(track) - 1:
-        # Drop a point that would leave a short final hop, then always keep the destination.
-        if cumulative[-1] - cumulative[kept[-1]] < MIN_TRACK_SPACING_MI and len(kept) > 1:
-            kept.pop()
-        kept.append(len(track) - 1)
-    return [track[index] for index in kept]
 
 
 def get_providers() -> Providers:

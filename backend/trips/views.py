@@ -1,9 +1,12 @@
 import json
+import logging
 from datetime import UTC, datetime, timedelta
+from time import monotonic
 from typing import TypeIs
 
+from django.conf import settings
+from django.core.cache import cache
 from django.http import HttpRequest, JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from trips.domain import Checkpoint, Place, Plan, Route
@@ -11,22 +14,38 @@ from trips.geometry import haversine
 from trips.planner import PlanRequest, plan_trip
 from trips.providers import NoRouteError, ProviderError, get_providers
 
+logger = logging.getLogger(__name__)
+
+DEPARTURE_PAST_HOURS = 1
+DEPARTURE_AHEAD_DAYS = 12
+GEOCODE_QUERY_MAX = 100
+GEOCODE_CACHE_SECONDS = 24 * 60 * 60
+RATE_WINDOW_SECONDS = 60
+PLAN_REQUESTS_PER_WINDOW = 6
+GEOCODE_REQUESTS_PER_WINDOW = 60
+
 
 @require_GET
 def health(_request: HttpRequest) -> JsonResponse:
     return JsonResponse({"ok": True})
 
 
-@csrf_exempt
 @require_GET
 def geocode(request: HttpRequest) -> JsonResponse:
     query = request.GET.get("q", "").strip()
-    if len(query) < 2:
+    if not 2 <= len(query) <= GEOCODE_QUERY_MAX:
         return JsonResponse([], safe=False)
-    try:
-        places = get_providers().geocode(query)
-    except ProviderError as exc:
-        return _error(str(exc), 502)
+    if _over_limit(request, "geocode", GEOCODE_REQUESTS_PER_WINDOW):
+        return _too_many_requests()
+
+    cache_key = _geocode_cache_key(query)
+    places = cache.get(cache_key)
+    if places is None:
+        try:
+            places = get_providers().geocode(query)
+        except ProviderError as exc:
+            return _error(str(exc), 502)
+        cache.set(cache_key, places, GEOCODE_CACHE_SECONDS)
     return JsonResponse(
         [
             {"label": place.label, "lon": round(place.lon, 5), "lat": round(place.lat, 5)}
@@ -36,12 +55,14 @@ def geocode(request: HttpRequest) -> JsonResponse:
     )
 
 
-@csrf_exempt
 @require_POST
 def plan(request: HttpRequest) -> JsonResponse:
+    if _over_limit(request, "plan", PLAN_REQUESTS_PER_WINDOW):
+        return _too_many_requests()
+
     try:
         payload = json.loads(request.body)
-    except (json.JSONDecodeError, UnicodeDecodeError):
+    except (json.JSONDecodeError, UnicodeDecodeError, RecursionError):
         return _error("Request body must be valid JSON.", 400)
     if not isinstance(payload, dict):
         return _error("Request body must be a JSON object.", 400)
@@ -51,29 +72,39 @@ def plan(request: HttpRequest) -> JsonResponse:
     except ValueError as exc:
         return _error(str(exc), 400)
 
+    started = monotonic()
     try:
         result = plan_trip(plan_request, get_providers())
-    except NoRouteError:
-        return _error("No route was found between these places.", 422)
+    except NoRouteError as exc:
+        return _error(str(exc), 422)
     except ProviderError as exc:
         return _error(str(exc), 502)
+    logger.info(
+        "plan routes=%d cells=%d cell_deg=%s elapsed_ms=%d",
+        len(result.routes),
+        len(result.heatmap.cells),
+        result.heatmap.cell_deg,
+        round((monotonic() - started) * 1000),
+    )
     return JsonResponse(_plan_json(result))
 
 
 def _parse_request(payload: dict[str, object]) -> PlanRequest:
-    origin = _parse_place(payload, "origin")
-    destination = _parse_place(payload, "destination")
+    origin = _parse_place(payload, "origin", "Origin")
+    destination = _parse_place(payload, "destination", "Destination")
     departure = _parse_departure(payload.get("departure"))
-    load_lb = _parse_int(payload, "load_lb")
-    interval_mi = _parse_int(payload, "interval_mi")
+    load_lb = _parse_int(payload, "load_lb", "Cargo weight must be a whole number of pounds.")
+    interval_mi = _parse_int(
+        payload, "interval_mi", "Pick a checkpoint interval of 10, 25 or 50 miles."
+    )
 
     if interval_mi not in (10, 25, 50):
-        raise ValueError("interval_mi must be 10, 25 or 50.")
+        raise ValueError("Pick a checkpoint interval of 10, 25 or 50 miles.")
     # Cargo cap: 80,000 lb legal gross minus the 35,000 lb tare added for TomTom.
     if not 1 <= load_lb <= 45_000:
-        raise ValueError("load_lb must be between 1 and 45,000 lb of cargo.")
+        raise ValueError("Cargo weight must be between 1 and 45,000 lb.")
     if haversine(origin.lon, origin.lat, destination.lon, destination.lat) < 1:
-        raise ValueError("origin and destination must be at least 1 mile apart.")
+        raise ValueError("Origin and destination must be at least 1 mile apart.")
 
     return PlanRequest(
         origin=origin,
@@ -84,49 +115,80 @@ def _parse_request(payload: dict[str, object]) -> PlanRequest:
     )
 
 
-def _parse_place(payload: dict[str, object], field: str) -> Place:
+def _parse_place(payload: dict[str, object], field: str, name: str) -> Place:
     value = payload.get(field)
     if not isinstance(value, dict):
-        raise ValueError(f"{field} must be an object with label, lon and lat.")
+        raise ValueError(f"{name} must include a name, a longitude and a latitude.")
     label, lon, lat = value.get("label"), value.get("lon"), value.get("lat")
     if not isinstance(label, str) or not label.strip():
-        raise ValueError(f"{field}.label must be a non-empty string.")
+        raise ValueError(f"Give the {name.lower()} a name.")
     if not _is_number(lon) or not _is_number(lat):
-        raise ValueError(f"{field}.lon and {field}.lat must be numbers.")
+        raise ValueError(f"{name} longitude and latitude must be numbers.")
     if not -180 <= lon <= 180:
-        raise ValueError(f"{field}.lon must be between -180 and 180.")
+        raise ValueError(f"{name} longitude must be between -180 and 180.")
     if not -90 <= lat <= 90:
-        raise ValueError(f"{field}.lat must be between -90 and 90.")
+        raise ValueError(f"{name} latitude must be between -90 and 90.")
     return Place(label=label.strip(), lon=float(lon), lat=float(lat))
 
 
 def _parse_departure(value: object) -> datetime:
     if not isinstance(value, str):
-        raise ValueError("departure must be an ISO 8601 time with a time zone.")
-    text = value[:-1] + "+00:00" if value.endswith("Z") else value
+        raise ValueError("Departure must be a date and time with a time zone.")
     try:
-        departure = datetime.fromisoformat(text)
-    except ValueError as exc:
-        raise ValueError("departure must be an ISO 8601 time with a time zone.") from exc
+        departure = datetime.fromisoformat(value)
+    except ValueError:
+        raise ValueError("Departure must be a date and time with a time zone.") from None
     if departure.tzinfo is None:
-        raise ValueError("departure must include a time zone, for example Z.")
+        raise ValueError("Departure must include a time zone, for example Z.")
     departure = departure.astimezone(UTC)
 
     now = datetime.now(UTC)
-    if not now - timedelta(hours=1) <= departure <= now + timedelta(days=14):
-        raise ValueError("departure must be between 1 hour ago and 14 days from now.")
+    if departure < now - timedelta(hours=DEPARTURE_PAST_HOURS):
+        raise ValueError("Departure cannot be more than 1 hour in the past.")
+    if departure > now + timedelta(days=DEPARTURE_AHEAD_DAYS):
+        raise ValueError("Departure must be within the next 12 days.")
     return departure
 
 
-def _parse_int(payload: dict[str, object], field: str) -> int:
+def _parse_int(payload: dict[str, object], field: str, message: str) -> int:
     value = payload.get(field)
     if not isinstance(value, int) or isinstance(value, bool):
-        raise ValueError(f"{field} must be an integer.")
+        raise ValueError(message)
     return value
 
 
 def _is_number(value: object) -> TypeIs[int | float]:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _geocode_cache_key(query: str) -> str:
+    return f"geocode:{query.lower()}"
+
+
+def _over_limit(request: HttpRequest, scope: str, limit: int) -> bool:
+    if not settings.THROTTLE_ENABLED:
+        return False
+    key = f"throttle:{scope}:{_client_address(request)}"
+    if cache.add(key, 1, RATE_WINDOW_SECONDS):
+        return False
+    try:
+        return cache.incr(key) > limit
+    except ValueError:
+        # The window expired between add and incr; this request starts a new one.
+        cache.set(key, 1, RATE_WINDOW_SECONDS)
+        return False
+
+
+def _client_address(request: HttpRequest) -> str:
+    """The first X-Forwarded-For entry, or the socket address behind Render's proxy."""
+    forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
+    return forwarded.split(",")[0].strip() if forwarded else request.META.get("REMOTE_ADDR", "")
+
+
+def _too_many_requests() -> JsonResponse:
+    response = _error("Too many requests. Wait a minute and try again.", 429)
+    response["Retry-After"] = str(RATE_WINDOW_SECONDS)
+    return response
 
 
 def _plan_json(plan: Plan) -> dict[str, object]:

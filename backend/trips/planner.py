@@ -57,7 +57,7 @@ def plan_trip(request: PlanRequest, providers: Providers) -> Plan:
         request.origin, request.destination, request.departure, request.load_lb
     )[:3]
     if not options:
-        raise NoRouteError("No route was found between these places.")
+        raise NoRouteError()
 
     start_hour = request.departure.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
     latest_arrival = max(
