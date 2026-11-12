@@ -1,0 +1,12 @@
+brief/
+.env
+.venv/
+__pycache__/
+*.pyc
+node_modules/
+frontend/dist/
+backend/staticfiles/
+.DS_Store
+test-results/
+playwright-report/
+.ruff_cache/
