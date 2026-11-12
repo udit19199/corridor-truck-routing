@@ -20,11 +20,26 @@ ALLOWED_HOSTS = [
 
 INSTALLED_APPS = ["trips"]
 
+# No CSRF middleware: the API is stateless, with no cookies or sessions.
 MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "django.middleware.gzip.GZipMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.middleware.common.CommonMiddleware",
 ]
+
+# Render terminates TLS and forwards the scheme. Its health checks use plain HTTP,
+# so there is no SSL redirect and no HSTS preload; HSTS is only sent on secure requests.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "same-origin"
+SECURE_HSTS_SECONDS = 0 if DEBUG else 31_536_000
+# Per-client request limits on the public API. The e2e suite turns them off because it plans
+# many times from one address.
+THROTTLE_ENABLED = os.environ.get("THROTTLE_ENABLED", "true").lower() in {"1", "true", "yes"}
+SECURE_HSTS_PRELOAD = False
+SECURE_SSL_REDIRECT = False
 
 ROOT_URLCONF = "config.urls"
 WSGI_APPLICATION = "config.wsgi.application"
@@ -38,15 +53,40 @@ CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
         "LOCATION": "trips-weather",
-        # A plan stores one entry per cell-hour (about 25k keys), well past the 300 default.
+        # A Dallas to Chicago plan stores 279 cells x 50 hours = about 14,000 entries.
+        # MAX_ENTRIES 100,000 holds about seven corridors in this one process.
         "OPTIONS": {"MAX_ENTRIES": 100_000},
     }
 }
 
 PROVIDER_TIMEOUT_S = 15
 
+# With DEBUG off, Django's default handlers are silent: request errors go to ADMINS,
+# who are unset. Send app logs and request errors to stdout for Render.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "console": {"format": "%(asctime)s %(levelname)s %(name)s %(message)s"},
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "console",
+            "stream": "ext://sys.stdout",
+        },
+    },
+    "root": {"handlers": ["console"], "level": "INFO"},
+    "loggers": {
+        "django.request": {"handlers": ["console"], "level": "ERROR", "propagate": False},
+    },
+}
+
 DIST_DIR = REPO_DIR / "frontend" / "dist"
 WHITENOISE_ROOT = str(DIST_DIR) if DIST_DIR.is_dir() else None
+
+# Vite puts an 8-character content hash in every asset name under /assets/.
+WHITENOISE_IMMUTABLE_FILE_TEST = r"^/assets/.+-[A-Za-z0-9_-]{8}\.\w+$"
 
 # Unknown asset paths must 404, not redirect to a slash URL that serves index.html.
 APPEND_SLASH = False

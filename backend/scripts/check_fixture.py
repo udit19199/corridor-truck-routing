@@ -22,8 +22,9 @@ import django
 
 django.setup()
 
-from trips.domain import Level, Place, Plan
-from trips.planner import PlanRequest, plan_trip
+from trips.domain import Level, Place, Plan, Route
+from trips.geometry import cell_of
+from trips.planner import HEATMAP_HOURS, PlanRequest, forecast_index, plan_trip
 from trips.providers import get_providers
 
 ORIGIN = Place("Dallas, TX", -96.797, 32.7767)
@@ -67,15 +68,24 @@ def check(plan_light: Plan, plan_heavy: Plan) -> list[str]:
     high = [values[Level.HIGH] for values in miles.values()]
     if high[0] >= high[1] or "High" not in plan_light.reason:
         failures.append("a: recommendation is not decided by fewer High miles")
+    if plan_light.recommended_id != "A":
+        failures.append(
+            f"a: Route A is not recommended at 20,000 lb, got {plan_light.recommended_id}"
+        )
 
-    light_winner = plan_light.recommended_id
-    heavy_winner = next(
-        route for route in plan_heavy.routes if route.id == light_winner
+    light_winner_severe_mi = next(
+        route for route in plan_heavy.routes if route.id == plan_light.recommended_id
     ).summary.miles_by_level[Level.SEVERE]
-    if heavy_winner <= 0:
-        failures.append(f"b: Route {light_winner} has no Severe miles at 45,000 lb")
-    if plan_heavy.recommended_id == light_winner:
+    if light_winner_severe_mi <= 0:
+        failures.append(f"b: Route {plan_light.recommended_id} has no Severe miles at 45,000 lb")
+    if plan_heavy.recommended_id == plan_light.recommended_id:
         failures.append("b: the recommended route did not change at 45,000 lb")
+    if plan_heavy.recommended_id != "B":
+        failures.append(
+            f"b: Route B is not recommended at 45,000 lb, got {plan_heavy.recommended_id}"
+        )
+    if "Severe" not in plan_heavy.reason:
+        failures.append("b: the reason does not name the Severe miles")
 
     levels = [level for cell in plan_light.heatmap.cells for level in cell.levels]
     moving = sum(
@@ -88,11 +98,20 @@ def check(plan_light: Plan, plan_heavy: Plan) -> list[str]:
     if moving < 10:
         failures.append("c: the heatmap barely changes over 48 hours")
 
+    routes = [route for plan in (plan_light, plan_heavy) for route in plan.routes]
+    covered_failures = _check_covered_miles(routes)
+    level_failures = _check_checkpoint_levels(plan_light) + _check_checkpoint_levels(plan_heavy)
+    failures += covered_failures + level_failures
+    worst_gap = max(
+        abs(sum(checkpoint.covers_mi for checkpoint in route.checkpoints) - route.distance_mi)
+        for route in routes
+    )
+
     print("\nchecks")
     print(f"  a, 20,000 lb: Severe/No Travel miles = 0, High miles = {high}")
     print(
-        f"  b, 45,000 lb: Route {light_winner} Severe miles = {heavy_winner:g}, "
-        f"recommended = {plan_heavy.recommended_id}"
+        f"  b, 45,000 lb: Route {plan_light.recommended_id} Severe miles = "
+        f"{light_winner_severe_mi:g}, recommended = {plan_heavy.recommended_id}"
     )
     print(
         f"  c: {len(plan_light.heatmap.cells)} cells, max level {Level(max(levels)).name}, "
@@ -100,8 +119,45 @@ def check(plan_light: Plan, plan_heavy: Plan) -> list[str]:
     )
     print(
         "  hourly max level:",
-        "".join(str(max(level for level in levels[h::49])) for h in range(49)),
+        "".join(
+            str(max(level for level in levels[hour::HEATMAP_HOURS]))
+            for hour in range(HEATMAP_HOURS)
+        ),
     )
+    print(f"  d: largest covered-miles gap {worst_gap:.3f} mi over {len(routes)} routes")
+    checkpoint_count = sum(len(route.checkpoints) for route in routes)
+    print(
+        f"  e: {checkpoint_count - len(level_failures)} of {checkpoint_count} checkpoints "
+        f"match their cell at the nearest slider hour"
+    )
+    return failures
+
+
+def _check_covered_miles(routes: list[Route]) -> list[str]:
+    failures = []
+    for route in routes:
+        covered = sum(checkpoint.covers_mi for checkpoint in route.checkpoints)
+        if abs(covered - route.distance_mi) > 0.1:
+            failures.append(
+                f"d: Route {route.id} covers {covered:.2f} mi of a {route.distance_mi:.2f} mi route"
+            )
+    return failures
+
+
+def _check_checkpoint_levels(plan: Plan) -> list[str]:
+    """A checkpoint must show the level of its cell at the slider hour nearest its ETA."""
+    cell_levels = {(cell.lon, cell.lat): cell.levels for cell in plan.heatmap.cells}
+    failures = []
+    for route in plan.routes:
+        for checkpoint in route.checkpoints:
+            cell = cell_of(checkpoint.lon, checkpoint.lat, plan.heatmap.cell_deg)
+            hour = forecast_index(checkpoint.eta, plan.heatmap.start)
+            hour = min(max(hour, 0), HEATMAP_HOURS - 1)
+            if cell_levels[cell][hour] != checkpoint.level:
+                failures.append(
+                    f"e: Route {route.id} mile {checkpoint.mile:.0f} is {checkpoint.level.name}, "
+                    f"but its cell is {cell_levels[cell][hour].name} at slider hour {hour}"
+                )
     return failures
 
 

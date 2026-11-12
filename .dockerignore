@@ -5,4 +5,4 @@ frontend/dist
 **/__pycache__
 e2e
 .git
-backend/.env
+**/.env
