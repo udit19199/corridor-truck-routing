@@ -95,7 +95,13 @@ test("a departure in the past shows an error and keeps the form usable", async (
   await pickPlace(page, "destination-input", "Chi", "Chicago, IL");
   await page.getByTestId("departure-input").fill("2020-01-01T08:00");
   await page.getByTestId("plan-submit").click();
-  await expect(page.getByTestId("error-banner")).toContainText(/departure/i);
+  await expect(page.getByTestId("departure-input-error")).toContainText(
+    "Departure must be between 1 hour ago and 12 days from now.",
+  );
+  await expect(page.getByTestId("departure-input")).toHaveAttribute(
+    "aria-invalid",
+    "true",
+  );
   await expect(page.getByTestId("plan-submit")).toBeEnabled();
 });
 

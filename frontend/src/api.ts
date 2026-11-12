@@ -61,8 +61,14 @@ export interface Route {
 export interface HeatmapCell {
   lon: number;
   lat: number;
-  /** 49 levels, one per hour from 0 to 48. */
+  /** One level per forecast hour, from hour 0 up. */
   levels: Level[];
+}
+
+/** The last forecast hour the heatmap covers, from the levels a cell carries. */
+export function maxHeatHour(plan: PlanResponse): number {
+  const levels = plan.heatmap.cells[0]?.levels;
+  return Math.max(0, (levels?.length ?? 1) - 1);
 }
 
 export interface Heatmap {
@@ -117,7 +123,12 @@ export async function geocode(query: string, signal?: AbortSignal): Promise<Plac
   if (!response.ok) {
     throw await errorFrom(response);
   }
-  const places: Place[] = await response.json();
+  let places: Place[];
+  try {
+    places = await response.json();
+  } catch {
+    throw new Error("The planning server sent an unreadable response.");
+  }
   return places;
 }
 
@@ -131,6 +142,11 @@ export async function planTrip(body: PlanRequest, signal?: AbortSignal): Promise
   if (!response.ok) {
     throw await errorFrom(response);
   }
-  const plan: PlanResponse = await response.json();
+  let plan: PlanResponse;
+  try {
+    plan = await response.json();
+  } catch {
+    throw new Error("The planning server sent an unreadable response.");
+  }
   return plan;
 }

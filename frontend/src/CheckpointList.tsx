@@ -1,5 +1,6 @@
+import { useState } from "react";
 import type { Checkpoint, Route } from "./api";
-import { formatClock, formatClockDetailed, formatMiles } from "./format";
+import { formatClock, formatMiles } from "./format";
 import { levelInfo } from "./levels";
 
 interface CheckpointListProps {
@@ -7,14 +8,28 @@ interface CheckpointListProps {
   onFocus: (checkpoint: Checkpoint) => void;
 }
 
-export default function CheckpointList({ route, onFocus }: CheckpointListProps) {
+export default function CheckpointList({
+  route,
+  onFocus,
+}: CheckpointListProps) {
+  const [focused, setFocused] = useState<{ routeId: string; mile: number } | null>(
+    null,
+  );
+  const shownMile = focused?.routeId === route.id ? focused.mile : null;
+  const [firstCheckpoint, secondCheckpoint] = route.checkpoints;
+  const spacingMi =
+    firstCheckpoint !== undefined && secondCheckpoint !== undefined
+      ? Math.round(secondCheckpoint.mile - firstCheckpoint.mile)
+      : null;
+
   return (
     <section className="section" aria-labelledby="checkpoints-heading">
       <div className="section-head">
         <h2 id="checkpoints-heading">Checkpoints</h2>
         <span className="section-meta">
-          Route {route.id}, {route.checkpoints.length} stop
+          Route {route.id}, {route.checkpoints.length} checkpoint
           {route.checkpoints.length === 1 ? "" : "s"}
+          {spacingMi !== null && ` every ${spacingMi} mi`}
         </span>
       </div>
 
@@ -23,7 +38,7 @@ export default function CheckpointList({ route, onFocus }: CheckpointListProps) 
       ) : (
         <div className="cp-list">
           {route.checkpoints.map((checkpoint) => {
-            const info = levelInfo(checkpoint.level);
+            const levelMeta = levelInfo(checkpoint.level);
             return (
               <button
                 key={`${checkpoint.mile}-${checkpoint.eta}`}
@@ -32,20 +47,35 @@ export default function CheckpointList({ route, onFocus }: CheckpointListProps) 
                 data-testid="checkpoint-row"
                 data-level={checkpoint.level}
                 data-eta={checkpoint.eta}
-                title={checkpoint.cause}
-                aria-label={`Mile ${formatMiles(checkpoint.mile)}, ${info.name}, arriving ${formatClockDetailed(
-                  checkpoint.eta,
-                )}. ${checkpoint.cause}`}
-                onClick={() => onFocus(checkpoint)}
+                data-mile={checkpoint.mile}
+                aria-current={checkpoint.mile === shownMile ? "true" : undefined}
+                onClick={() => {
+                  setFocused({ routeId: route.id, mile: checkpoint.mile });
+                  onFocus(checkpoint);
+                }}
               >
                 <span
                   className="cp-dot"
-                  style={{ backgroundColor: info.color }}
+                  style={{ backgroundColor: levelMeta.color }}
                   aria-hidden="true"
                 />
-                <span className="cp-mile">Mile {formatMiles(checkpoint.mile)}</span>
-                <span className="cp-time">{formatClock(checkpoint.eta)}</span>
-                <span className="cp-level">{info.name}</span>
+                <span className="cp-main">
+                  <span className="cp-line">
+                    <span className="cp-mile">Mile {formatMiles(checkpoint.mile)}</span>
+                    <span className="cp-time">{formatClock(checkpoint.eta)}</span>
+                  </span>
+                  <span className="cp-detail">
+                    <span
+                      className="cp-level"
+                      style={{ color: levelMeta.color }}
+                    >
+                      {levelMeta.name}
+                    </span>
+                    {checkpoint.level > 0 && (
+                      <span className="cp-cause">{checkpoint.cause}</span>
+                    )}
+                  </span>
+                </span>
               </button>
             );
           })}

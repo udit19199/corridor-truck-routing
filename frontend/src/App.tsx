@@ -9,20 +9,30 @@ import {
   type ReactNode,
 } from "react";
 import {
+  maxHeatHour,
   planTrip,
   type Checkpoint,
   type PlanRequest,
   type PlanResponse,
 } from "./api";
 import CheckpointList from "./CheckpointList";
+import {
+  formatClock,
+  formatLoad,
+  prefersReducedMotion,
+  timeZoneAbbreviation,
+} from "./format";
 import HourSlider from "./HourSlider";
 import { LEVELS } from "./levels";
+import type { MapApi } from "./mapHandoff";
+import MapUnavailable from "./MapUnavailable";
 import RouteCards from "./RouteCards";
-import type { MapApi, MapPending } from "./mapLayers";
 import TripForm from "./TripForm";
 
 // The map pulls in MapLibre; loading it separately lets the form paint first.
 const RouteMap = lazy(() => import("./RouteMap"));
+
+const PLAN_TIMEOUT_MS = 30_000;
 
 // A failed map chunk or missing WebGL must not blank the form and route cards.
 class MapErrorBoundary extends Component<
@@ -37,26 +47,37 @@ class MapErrorBoundary extends Component<
 
   render() {
     if (this.state.failed) {
-      return (
-        <div className="map-loading" role="alert">
-          The map could not load. Routes and checkpoints are still listed on the
-          left.
-        </div>
-      );
+      return <MapUnavailable reason="The map code could not be loaded." />;
     }
     return this.props.children;
   }
 }
 
-type PlanState =
-  | { status: "idle" }
-  | { status: "loading"; plan: PlanResponse | null }
-  | { status: "ready"; plan: PlanResponse }
-  | { status: "error"; plan: PlanResponse | null; message: string };
+/** The plan on screen and the request that produced it. */
+interface ShownPlan {
+  plan: PlanResponse;
+  request: PlanRequest;
+  selectedId: string;
+  /** Bumped for every plan, so the slider remounts at hour 0. */
+  version: number;
+}
+
+interface RequestState {
+  status: "idle" | "loading" | "error";
+  message?: string;
+}
+
+const IDLE: RequestState = { status: "idle" };
 
 function errorMessage(error: unknown): string {
+  if (
+    error instanceof DOMException &&
+    (error.name === "TimeoutError" || error.name === "AbortError")
+  ) {
+    return "Planning took too long. Try again.";
+  }
   if (error instanceof TypeError) {
-    return "Cannot reach the planning server. Check that the API is running, then try again.";
+    return "Could not reach the server. Check your connection and try again.";
   }
   if (error instanceof Error) {
     return error.message;
@@ -127,7 +148,7 @@ function EmptyState() {
       <ul className="empty-points">
         <li>Three routes, ranked by risk</li>
         <li>Weather at every checkpoint</li>
-        <li>48-hour corridor heatmap</li>
+        <li>Hourly corridor heatmap</li>
       </ul>
     </div>
   );
@@ -164,103 +185,98 @@ function RefreshState() {
   );
 }
 
-export default function App() {
-  const [state, setState] = useState<PlanState>({ status: "idle" });
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [planVersion, setPlanVersion] = useState(0);
-  const planRef = useRef<PlanResponse | null>(null);
-  const requestRef = useRef(0);
-  const mapApiRef = useRef<MapApi | null>(null);
-  const mapPendingRef = useRef<MapPending>({ hour: 0, focus: null });
-
-  // A fast drag can fire more input events than the map draws frames; keep only
-  // the newest hour and apply it once per frame.
-  const pendingHour = useRef<number | null>(null);
-  const hourFrame = useRef(0);
-
-  const runPlan = useCallback(async (request: PlanRequest) => {
-    const requestId = requestRef.current + 1;
-    requestRef.current = requestId;
-    mapPendingRef.current.focus = null;
-    setState({ status: "loading", plan: planRef.current });
-
-    try {
-      const plan = await planTrip(request);
-      if (requestRef.current !== requestId) {
-        return;
-      }
-      planRef.current = plan;
-      // A new plan starts at hour 0. The slider remounts at 0, and the map reads
-      // this value, so drop any frame queued for the old plan first.
-      mapPendingRef.current.hour = 0;
-      if (hourFrame.current !== 0) {
-        window.cancelAnimationFrame(hourFrame.current);
-        hourFrame.current = 0;
-      }
-      pendingHour.current = null;
-      setSelectedId(plan.recommended_id);
-      setPlanVersion((version) => version + 1);
-      setState({ status: "ready", plan });
-    } catch (error) {
-      if (requestRef.current !== requestId) {
-        return;
-      }
-      setState({
-        status: "error",
-        plan: planRef.current,
-        message: errorMessage(error),
-      });
-    }
-  }, []);
-
-  const handleSubmit = useCallback(
-    (request: PlanRequest) => {
-      void runPlan(request);
-    },
-    [runPlan],
+function PlanSummary({ shown }: { shown: ShownPlan }) {
+  const { plan, request } = shown;
+  return (
+    <p className="plan-summary" data-testid="plan-summary">
+      {request.origin.label} to {request.destination.label},{" "}
+      {formatLoad(plan.load_lb)}, checkpoints every {plan.interval_mi} mi,
+      departs {formatClock(plan.departure)}
+    </p>
   );
+}
 
-  const handleSelectRoute = useCallback((routeId: string) => {
-    setSelectedId(routeId);
-  }, []);
+export default function App() {
+  const [shown, setShown] = useState<ShownPlan | null>(null);
+  const [request, setRequest] = useState<RequestState>(IDLE);
+  const requestRef = useRef<AbortController | null>(null);
+  const mapApiRef = useRef<MapApi | null>(null);
+  const hourRef = useRef(0);
 
-  const handleFocusCheckpoint = useCallback((checkpoint: Checkpoint) => {
-    if (mapApiRef.current === null) {
-      mapPendingRef.current.focus = checkpoint;
-    } else {
-      mapApiRef.current.focusCheckpoint(checkpoint);
-    }
-  }, []);
+  const runPlan = useCallback((nextRequest: PlanRequest) => {
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
+    setRequest({ status: "loading" });
 
-  const handleHour = useCallback((hour: number) => {
-    mapPendingRef.current.hour = hour;
-    pendingHour.current = hour;
-    if (hourFrame.current !== 0) {
-      return;
-    }
-    hourFrame.current = window.requestAnimationFrame(() => {
-      hourFrame.current = 0;
-      const next = pendingHour.current;
-      pendingHour.current = null;
-      if (next !== null) {
-        mapApiRef.current?.setHour(next);
-      }
-    });
+    const signal = AbortSignal.any([
+      controller.signal,
+      AbortSignal.timeout(PLAN_TIMEOUT_MS),
+    ]);
+    planTrip(nextRequest, signal)
+      .then((plan) => {
+        // A superseded or timed out request must not replace what is on screen.
+        if (controller.signal.aborted) {
+          return;
+        }
+        // The new plan starts at hour 0: the slider remounts there, and the map
+        // reads this ref, so reset it before either can paint.
+        hourRef.current = 0;
+        setShown((previous) => ({
+          plan,
+          request: nextRequest,
+          selectedId: plan.recommended_id,
+          version: (previous?.version ?? 0) + 1,
+        }));
+        setRequest(IDLE);
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+        setRequest({ status: "error", message: errorMessage(error) });
+      });
   }, []);
 
   useEffect(() => {
     return () => {
-      if (hourFrame.current !== 0) {
-        window.cancelAnimationFrame(hourFrame.current);
-      }
+      requestRef.current?.abort();
     };
   }, []);
 
-  const plan = state.status === "idle" ? null : state.plan;
+  const handleSelectRoute = useCallback((routeId: string) => {
+    setShown((previous) =>
+      previous === null ? null : { ...previous, selectedId: routeId },
+    );
+  }, []);
+
+  const handleHour = useCallback((hour: number) => {
+    hourRef.current = hour;
+    mapApiRef.current?.setHour(hour);
+  }, []);
+
   const selectedRoute =
-    plan?.routes.find((route) => route.id === selectedId) ??
-    plan?.routes[0] ??
-    null;
+    shown?.plan.routes.find((route) => route.id === shown.selectedId) ?? null;
+
+  const handleFocusCheckpoint = useCallback(
+    (checkpoint: Checkpoint) => {
+      if (selectedRoute === null) {
+        return;
+      }
+      // Below 900 px the map sits under the panel, so a tapped checkpoint would
+      // otherwise fly a map the user cannot see.
+      if (window.matchMedia("(max-width: 900px)").matches) {
+        document.querySelector(".map-shell")?.scrollIntoView({
+          behavior: prefersReducedMotion() ? "auto" : "smooth",
+          block: "start",
+        });
+      }
+      mapApiRef.current?.focusCheckpoint(selectedRoute.id, checkpoint);
+    },
+    [selectedRoute],
+  );
+
+  const maxHour = shown === null ? 0 : maxHeatHour(shown.plan);
 
   return (
     <div className="app">
@@ -284,7 +300,7 @@ export default function App() {
         </header>
 
         <div className="panel-scroll">
-          {state.status === "error" && (
+          {request.status === "error" && (
             <div
               className="error-banner"
               data-testid="error-banner"
@@ -312,25 +328,32 @@ export default function App() {
               </svg>
               <div>
                 <strong>Couldn’t plan this trip</strong>
-                <p>{state.message}</p>
+                <p>{request.message}</p>
+                {shown !== null && (
+                  <p className="error-previous">
+                    The results below are from the previous plan.
+                  </p>
+                )}
               </div>
             </div>
           )}
 
           <TripForm
-            loading={state.status === "loading"}
-            hasPlan={plan !== null}
-            onSubmit={handleSubmit}
+            loading={request.status === "loading"}
+            hasPlan={shown !== null}
+            planIntervalMi={shown?.plan.interval_mi ?? null}
+            onSubmit={runPlan}
           />
 
-          {state.status === "loading" && plan === null && <LoadingState />}
+          {request.status === "loading" && shown === null && <LoadingState />}
 
-          {plan !== null && (
+          {shown !== null && (
             <>
-              {state.status === "loading" && <RefreshState />}
+              {request.status === "loading" && <RefreshState />}
+              <PlanSummary shown={shown} />
               <RouteCards
-                plan={plan}
-                selectedId={selectedId}
+                plan={shown.plan}
+                selectedId={shown.selectedId}
                 onSelect={handleSelectRoute}
               />
               {selectedRoute !== null && (
@@ -340,13 +363,14 @@ export default function App() {
                 />
               )}
               <p className="fine-print">
-                Forecast covers 48 h from departure. Times are local; weather
-                comes from the nearest hourly forecast.
+                Times are in your time zone ({timeZoneAbbreviation()}). The
+                corridor heatmap covers {maxHour} h from the first forecast
+                hour; each checkpoint uses the forecast hour nearest its ETA.
               </p>
             </>
           )}
 
-          {plan === null && state.status !== "loading" && <EmptyState />}
+          {shown === null && request.status !== "loading" && <EmptyState />}
         </div>
       </aside>
 
@@ -360,20 +384,21 @@ export default function App() {
             }
           >
             <RouteMap
-              plan={plan}
-              selectedId={selectedId}
+              plan={shown?.plan ?? null}
+              selectedId={shown?.selectedId ?? null}
+              hourRef={hourRef}
               onSelectRoute={handleSelectRoute}
               apiRef={mapApiRef}
-              pendingRef={mapPendingRef}
             />
           </Suspense>
         </MapErrorBoundary>
 
-        {plan !== null && (
+        {shown !== null && (
           <div className="map-dock">
             <HourSlider
-              key={planVersion}
-              departure={plan.departure}
+              key={shown.version}
+              start={shown.plan.heatmap.start}
+              maxHour={maxHour}
               onHour={handleHour}
             />
             <div className="dock-foot">

@@ -1,6 +1,15 @@
 import type { PlanResponse, Route } from "./api";
-import { formatClock, formatDistance, formatDuration, formatMiles, formatRisk } from "./format";
+import {
+  formatClock,
+  formatDistance,
+  formatDuration,
+  formatMiles,
+  formatRisk,
+} from "./format";
 import { LEVELS, levelInfo } from "./levels";
+
+/** The miles the ranking compares first: No Travel, then Severe, then High. */
+const RANK_LEVELS = [4, 3, 2] as const;
 
 interface RouteCardProps {
   route: Route;
@@ -10,14 +19,24 @@ interface RouteCardProps {
   onSelect: (routeId: string) => void;
 }
 
-function RouteCard({ route, recommended, selected, reason, onSelect }: RouteCardProps) {
-  const segments = LEVELS.flatMap((info, level) => {
+function RouteCard({
+  route,
+  recommended,
+  selected,
+  reason,
+  onSelect,
+}: RouteCardProps) {
+  const levelMiles = LEVELS.flatMap((levelMeta, level) => {
     const miles = route.summary.miles_by_level[level];
-    return miles === undefined || miles <= 0 ? [] : [{ info, miles }];
+    return miles === undefined || miles <= 0 ? [] : [{ levelMeta, miles }];
+  });
+  const rankMiles = RANK_LEVELS.flatMap((level) => {
+    const miles = route.summary.miles_by_level[level];
+    return miles > 0 ? [{ level, miles }] : [];
   });
   const worst = levelInfo(route.summary.worst);
-  const barLabel = segments
-    .map((segment) => `${segment.info.name}: ${formatMiles(segment.miles)} miles`)
+  const barLabel = levelMiles
+    .map(({ levelMeta, miles }) => `${levelMeta.name}: ${formatMiles(miles)} miles`)
     .join(", ");
 
   return (
@@ -28,6 +47,7 @@ function RouteCard({ route, recommended, selected, reason, onSelect }: RouteCard
       data-route-id={route.id}
       data-recommended={String(recommended)}
       data-selected={String(selected)}
+      aria-label={`Route ${route.id}, ${route.name}`}
       aria-pressed={selected}
       onClick={() => onSelect(route.id)}
     >
@@ -70,26 +90,54 @@ function RouteCard({ route, recommended, selected, reason, onSelect }: RouteCard
         </span>
       </span>
 
-      <span className="risk-bar" role="img" aria-label={`Miles by risk level (${barLabel})`}>
-        {segments.map((segment) => (
+      <span
+        className="risk-bar"
+        role="img"
+        aria-label={`Miles by risk level (${barLabel})`}
+      >
+        {levelMiles.map(({ levelMeta, miles }) => (
           <span
-            key={segment.info.name}
-            title={`${segment.info.name}: ${formatMiles(segment.miles)} mi`}
+            key={levelMeta.name}
+            title={`${levelMeta.name}: ${formatMiles(miles)} mi`}
             style={{
-              flexGrow: segment.miles,
+              flexGrow: miles,
               flexBasis: 0,
-              backgroundColor: segment.info.color,
+              backgroundColor: levelMeta.color,
             }}
           />
         ))}
       </span>
 
+      <span className="rc-ranks">
+        {rankMiles.length === 0 ? (
+          <span className="rc-rank">No High or worse miles</span>
+        ) : (
+          rankMiles.map(({ level, miles }) => {
+            const levelMeta = levelInfo(level);
+            return (
+              <span className="rc-rank" key={level}>
+                <span
+                  className="level-dot"
+                  style={{ backgroundColor: levelMeta.color }}
+                  aria-hidden="true"
+                />
+                {levelMeta.name} {formatMiles(miles)} mi
+              </span>
+            );
+          })
+        )}
+      </span>
+
       <span className="rc-foot">
         <span>
-          Avg risk <strong>{formatRisk(route.summary.avg_risk)}</strong>
+          Avg risk <strong>{formatRisk(route.summary.avg_risk)}</strong> of 4
         </span>
         <span className="worst-chip">
-          <span className="worst-dot" style={{ backgroundColor: worst.color }} aria-hidden="true" />
+          <span
+            className="level-dot"
+            style={{ backgroundColor: worst.color }}
+            aria-hidden="true"
+          />
           {worst.name} worst
         </span>
       </span>
@@ -109,13 +157,18 @@ interface RouteCardsProps {
   onSelect: (routeId: string) => void;
 }
 
-export default function RouteCards({ plan, selectedId, onSelect }: RouteCardsProps) {
+export default function RouteCards({
+  plan,
+  selectedId,
+  onSelect,
+}: RouteCardsProps) {
   return (
     <section className="section" aria-labelledby="routes-heading">
       <div className="section-head">
         <h2 id="routes-heading">Routes</h2>
         <span className="section-meta">
-          {plan.routes.length} option{plan.routes.length === 1 ? "" : "s"}, ranked by risk
+          {plan.routes.length} option{plan.routes.length === 1 ? "" : "s"}, ranked
+          by risk
         </span>
       </div>
       <div className="route-list">
