@@ -62,7 +62,9 @@ interface ShownPlan {
   plan: PlanResponse;
   request: PlanRequest;
   selectedId: string;
-  /** Bumped for every plan, so the slider and checkpoint focus reset. */
+  /** The checkpoint whose popup is open. Cleared by a new plan or another route. */
+  focus: PopupState | null;
+  /** Bumped for every plan, so the slider resets. */
   version: number;
 }
 
@@ -93,16 +95,23 @@ export default function App() {
       plan,
       request,
       selectedId: plan.recommended_id,
+      focus: null,
       version: (previous?.version ?? 0) + 1,
     }));
   }, []);
 
-  const { request, runPlan } = usePlanRequest(handlePlan);
+  const { request, runPlan, cancel: cancelPlan } = usePlanRequest(handlePlan);
 
   const handleSelectRoute = useCallback((routeId: string) => {
     setShown((previous) =>
-      previous === null ? null : { ...previous, selectedId: routeId },
+      previous === null
+        ? null
+        : { ...previous, selectedId: routeId, focus: null },
     );
+  }, []);
+
+  const handlePopup = useCallback((focus: PopupState | null) => {
+    setShown((previous) => (previous === null ? null : { ...previous, focus }));
   }, []);
 
   const handleHour = useCallback((hour: number) => {
@@ -170,6 +179,7 @@ export default function App() {
             loading={request.status === "loading"}
             planIntervalMi={shown?.plan.interval_mi ?? null}
             onSubmit={runPlan}
+            onCancel={cancelPlan}
           />
 
           {request.status === "loading" && shown === null && <LoadingState />}
@@ -185,9 +195,13 @@ export default function App() {
               />
               {selectedRoute !== null && (
                 <CheckpointList
-                  key={shown.version}
                   route={selectedRoute}
                   intervalMi={shown.plan.interval_mi}
+                  focusedMile={
+                    shown.focus?.routeId === selectedRoute.id
+                      ? shown.focus.checkpoint.mile
+                      : null
+                  }
                   onFocus={handleFocusCheckpoint}
                 />
               )}
@@ -215,6 +229,8 @@ export default function App() {
             <RouteMap
               plan={shown?.plan ?? null}
               selectedId={shown?.selectedId ?? null}
+              popup={shown?.focus ?? null}
+              onPopup={handlePopup}
               hourRef={hourRef}
               pendingFocusRef={pendingFocusRef}
               onSelectRoute={handleSelectRoute}

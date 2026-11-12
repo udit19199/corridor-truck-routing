@@ -27,8 +27,8 @@ function errorMessage(error: unknown): string {
 }
 
 /**
- * One plan request at a time, with a 30 second timeout. A newer request aborts the
- * older one, and a superseded or timed out request never reports.
+ * One plan request at a time, with a 30 second timeout. A newer request or `cancel`
+ * aborts the one in flight, and an aborted request never reports.
  */
 export function usePlanRequest(
   onPlan: (plan: PlanResponse, request: PlanRequest) => void,
@@ -53,6 +53,7 @@ export function usePlanRequest(
           if (controller.signal.aborted) {
             return;
           }
+          requestRef.current = null;
           onPlan(plan, nextRequest);
           setRequest(IDLE);
         })
@@ -60,6 +61,7 @@ export function usePlanRequest(
           if (controller.signal.aborted) {
             return;
           }
+          requestRef.current = null;
           setRequest({ status: "error", message: errorMessage(error) });
         });
     },
@@ -72,5 +74,14 @@ export function usePlanRequest(
     };
   }, []);
 
-  return { request, runPlan };
+  const cancel = useCallback(() => {
+    if (requestRef.current === null) {
+      return;
+    }
+    requestRef.current.abort();
+    requestRef.current = null;
+    setRequest(IDLE);
+  }, []);
+
+  return { request, runPlan, cancel };
 }

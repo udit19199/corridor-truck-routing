@@ -51,6 +51,9 @@ const INTERACTIVE_LAYERS = [
 interface RouteMapProps {
   plan: PlanResponse | null;
   selectedId: string | null;
+  /** The open checkpoint popup; App owns it so the list can mark the same row. */
+  popup: PopupState | null;
+  onPopup: (popup: PopupState | null) => void;
   /** The hour the slider shows. The map opens on it after a lazy load. */
   hourRef: MutableRefObject<number>;
   /** A checkpoint focus made before the map finished loading; App clears it on a new plan. */
@@ -59,14 +62,11 @@ interface RouteMapProps {
   apiRef: MutableRefObject<MapApi | null>;
 }
 
-interface OpenPopup extends PopupState {
-  /** The plan the checkpoint belongs to; a new plan closes the popup. */
-  plan: PlanResponse;
-}
-
 function RouteMap({
   plan,
   selectedId,
+  popup,
+  onPopup,
   hourRef,
   pendingFocusRef,
   onSelectRoute,
@@ -74,7 +74,6 @@ function RouteMap({
 }: RouteMapProps) {
   const mapRef = useRef<MapRef | null>(null);
   const loadedRef = useRef(false);
-  const [openPopup, setOpenPopup] = useState<OpenPopup | null>(null);
   const [mapFailed, setMapFailed] = useState<"webgl" | "basemap" | null>(null);
 
   const debug =
@@ -94,6 +93,7 @@ function RouteMap({
   const planRef = useRef<PlanResponse | null>(plan);
   const selectedRef = useRef<string | null>(selectedId);
   const onSelectRouteRef = useRef(onSelectRoute);
+  const onPopupRef = useRef(onPopup);
 
   // A fast drag can fire more input events than the map draws frames; keep only
   // the newest hour and apply it once per frame.
@@ -105,6 +105,7 @@ function RouteMap({
     planRef.current = plan;
     selectedRef.current = selectedId;
     onSelectRouteRef.current = onSelectRoute;
+    onPopupRef.current = onPopup;
   });
 
   const applyHourNow = useCallback(
@@ -119,11 +120,10 @@ function RouteMap({
 
   const focusOn = useCallback(
     (map: MapLibreMap, routeId: string, checkpoint: Checkpoint) => {
-      const currentPlan = planRef.current;
-      if (currentPlan === null) {
+      if (planRef.current === null) {
         return;
       }
-      setOpenPopup({ routeId, checkpoint, plan: currentPlan });
+      onPopupRef.current({ routeId, checkpoint });
       // The popup opens upward. On a phone the map is only partly on screen, so
       // keep the checkpoint low and let the popup clear the panel above it.
       const narrow = window.matchMedia("(max-width: 900px)").matches;
@@ -152,8 +152,8 @@ function RouteMap({
         const checkpoint = currentPlan?.routes
           .find((route) => route.id === routeId)
           ?.checkpoints[index];
-        if (checkpoint !== undefined && currentPlan !== null) {
-          setOpenPopup({ routeId, checkpoint, plan: currentPlan });
+        if (checkpoint !== undefined) {
+          onPopupRef.current({ routeId, checkpoint });
           return;
         }
       }
@@ -166,12 +166,11 @@ function RouteMap({
     );
     const routeId = routeFeature?.properties?.routeId;
     if (typeof routeId === "string") {
-      setOpenPopup(null);
       onSelectRouteRef.current(routeId);
       return;
     }
 
-    setOpenPopup(null);
+    onPopupRef.current(null);
   }, []);
 
   // `interactiveLayerIds` already fills `event.features`, so the cursor follows
@@ -299,8 +298,6 @@ function RouteMap({
     };
   }, []);
 
-  const popup = openPopup !== null && openPopup.plan === plan ? openPopup : null;
-
   if (mapFailed !== null) {
     return (
       <MapUnavailable
@@ -358,7 +355,7 @@ function RouteMap({
             closeButton
             closeOnClick={false}
             maxWidth="300px"
-            onClose={() => setOpenPopup(null)}
+            onClose={() => onPopup(null)}
           >
             <CheckpointPopup
               routeId={popup.routeId}

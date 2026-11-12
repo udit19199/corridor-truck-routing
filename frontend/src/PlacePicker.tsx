@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useRef,
   useState,
   type KeyboardEvent,
   type MouseEvent,
@@ -12,14 +13,16 @@ type SearchState =
 
 /**
  * Debounced place search plus the listbox state that follows from it. A query
- * that matches the chosen place, or is too short, clears the list.
+ * that matches the chosen place, or is too short, clears the list. An answer opens
+ * the list only while the field has focus, so it never covers a field the user moved to.
  */
-function usePlaceSearch(query: string, value: Place | null) {
+function usePlaceSearch(inputId: string, query: string, value: Place | null) {
   const [placeSearch, setPlaceSearch] = useState<SearchState>({
     status: "idle",
   });
   const [listOpen, setListOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const cancelPendingRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -30,6 +33,11 @@ function usePlaceSearch(query: string, value: Place | null) {
     }
 
     const controller = new AbortController();
+    const openIfFocused = () => {
+      if (document.activeElement?.id === inputId) {
+        setListOpen(true);
+      }
+    };
     const timer = window.setTimeout(() => {
       setPlaceSearch({ status: "searching" });
       geocode(trimmed, controller.signal)
@@ -39,22 +47,32 @@ function usePlaceSearch(query: string, value: Place | null) {
           }
           setPlaceSearch({ status: "done", options });
           setActiveIndex(options.length > 0 ? 0 : -1);
-          setListOpen(true);
+          openIfFocused();
         })
         .catch(() => {
           if (controller.signal.aborted) {
             return;
           }
           setPlaceSearch({ status: "failed" });
-          setListOpen(true);
+          openIfFocused();
         });
     }, 250);
 
-    return () => {
+    const cancelPending = () => {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [query, value]);
+    cancelPendingRef.current = cancelPending;
+    return cancelPending;
+  }, [inputId, query, value]);
+
+  /** Escape dismisses the list, including an answer that has not arrived yet. */
+  function dismissSearch() {
+    cancelPendingRef.current?.();
+    setPlaceSearch({ status: "idle" });
+    setListOpen(false);
+    setActiveIndex(-1);
+  }
 
   function resetSearch() {
     setPlaceSearch({ status: "idle" });
@@ -68,6 +86,7 @@ function usePlaceSearch(query: string, value: Place | null) {
     activeIndex,
     setActiveIndex,
     resetSearch,
+    dismissSearch,
   };
 }
 
@@ -126,17 +145,19 @@ function preventBlur(event: MouseEvent<HTMLLIElement>) {
 }
 
 /**
- * Leaving a field by pressing the submit button is a submit attempt, and the submit
- * handler shows the messages itself. Showing them on the blur would move the button
- * down between mousedown and mouseup, so the click would land on the form instead.
+ * Leaving a field for one of the form's buttons (an interval or submit) must not
+ * show the field's message on the blur: the message would push the buttons down
+ * between mousedown and mouseup, and the click would be lost. Submit shows the
+ * messages itself; an interval click is not a judgement on the field yet.
  */
-export function leavesToSubmit(target: EventTarget | null): boolean {
-  return target instanceof HTMLButtonElement && target.type === "submit";
+export function leavesToFormButton(target: EventTarget | null): boolean {
+  return target instanceof HTMLButtonElement && target.closest("form") !== null;
 }
 
 interface ComboboxKeys {
   openList: () => void;
   closeList: () => void;
+  dismiss: () => void;
   stepActive: (delta: 1 | -1) => void;
   chooseActive: () => void;
 }
@@ -161,7 +182,11 @@ function handleComboboxKey(
     keys.chooseActive();
     return;
   }
-  if (key === "Escape" || key === "Tab") {
+  if (key === "Escape") {
+    keys.dismiss();
+    return;
+  }
+  if (key === "Tab") {
     keys.closeList();
   }
 }
@@ -262,7 +287,8 @@ export default function PlacePicker({
     activeIndex,
     setActiveIndex,
     resetSearch,
-  } = usePlaceSearch(query, value);
+    dismissSearch,
+  } = usePlaceSearch(inputId, query, value);
   const options = placeSearch.status === "done" ? placeSearch.options : [];
   const listShown =
     listOpen && (options.length > 0 || placeSearch.status !== "idle");
@@ -293,6 +319,7 @@ export default function PlacePicker({
         setListOpen(false);
         setActiveIndex(-1);
       },
+      dismiss: dismissSearch,
       stepActive: (delta) =>
         setActiveIndex((current) =>
           nextActiveIndex(current, delta, options.length),
@@ -345,7 +372,7 @@ export default function PlacePicker({
           onKeyDown={handleKeyDown}
           onBlur={(event) => {
             window.setTimeout(() => setListOpen(false), 120);
-            if (!leavesToSubmit(event.relatedTarget)) {
+            if (!leavesToFormButton(event.relatedTarget)) {
               onLeave();
             }
           }}
