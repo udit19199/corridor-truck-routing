@@ -385,13 +385,18 @@ def _openmeteo_hourly(
         for cell in own:
             _release_fetch(cell, start, hours)
 
-    # Another request was fetching these; its result is cached by now.
+    # Another request was fetching these. Its result is cached by now unless that fetch failed,
+    # and then the misses go out in the same batches as above, not one request per cell.
+    missed: list[Cell] = []
     for cell, event in waiting:
         event.wait()
         cached = _cached_series(cell, start, hours)
-        series[cell] = (
-            cached if cached is not None else _fetch_openmeteo([cell], start, hours)[cell]
-        )
+        if cached is None:
+            missed.append(cell)
+        else:
+            series[cell] = cached
+    for chunk in _chunks(missed, 100):
+        series.update(_fetch_openmeteo(chunk, start, hours))
     return series
 
 
