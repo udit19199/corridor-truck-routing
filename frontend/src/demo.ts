@@ -2,7 +2,7 @@ import type { PlanRequest } from "./api";
 
 /**
  * The storm demo: the server's recorded Dallas to Chicago routes under its scripted storm
- * (DESIGN.md 5.3). Live weather is often calm everywhere, which hides the risk and load
+ * (DESIGN.md 5.5). Live weather is often calm everywhere, which hides the risk and load
  * rules; the demo shows them on any day.
  */
 

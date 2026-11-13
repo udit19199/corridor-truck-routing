@@ -1401,7 +1401,7 @@ input[type="number"] {
   grid-template-columns: repeat(2, 1fr);
 }
 
-.demo-loads button:disabled {
+.demo-loads button[aria-disabled="true"] {
   cursor: wait;
   opacity: 0.6;
 }

@@ -300,7 +300,7 @@ type Level = 0 | 1 | 2 | 3 | 4;              // LOW, MODERATE, HIGH, SEVERE, NO_
 interface PlanRequest {
   origin: Place; destination: Place;         // Place = { label: string; lon: number; lat: number }
   departure: string; load_lb: number; interval_mi: 10 | 25 | 50;
-  demo?: boolean;                             // true: recorded routes and the scripted storm (5.5)
+  demo?: boolean;                             // true: recorded Dallas to Chicago routes and the scripted storm (5.5); origin and destination are validated but do not change the routes
 }
 
 interface PlanResponse {
