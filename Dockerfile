@@ -21,4 +21,5 @@ RUN useradd --no-create-home --uid 10001 app
 USER app
 # Exec form with an explicit exec, so gunicorn replaces the shell and gets SIGTERM as PID 1.
 # One worker owns the in-memory weather cache; threads carry the I/O-bound plan work.
-CMD ["sh", "-c", "exec gunicorn config.wsgi --bind 0.0.0.0:${PORT:-8000} --workers 1 --threads 8 --timeout 60 --access-logfile -"]
+# No control socket: nothing uses gunicornc, and the app user has no home to put it in.
+CMD ["sh", "-c", "exec gunicorn config.wsgi --bind 0.0.0.0:${PORT:-8000} --workers 1 --threads 8 --timeout 60 --access-logfile - --no-control-socket"]
