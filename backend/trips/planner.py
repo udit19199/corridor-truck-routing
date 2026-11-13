@@ -25,8 +25,9 @@ from trips.providers import NoRouteError, Providers
 from trips.rules import classify, covered_miles, rank, summarize
 
 HEATMAP_HOURS = 49
-# Open-Meteo serves 600 locations a minute. Staying well under it leaves room for other plans.
-MAX_WEATHER_CELLS = 450
+# Open-Meteo serves 600 locations a minute. A live Dallas to Chicago plan needs 366 cells at
+# 0.25 deg, so at most one cold plan a minute would fit; at 0.5 deg it needs 136, about four.
+MAX_WEATHER_CELLS = 250
 # Finest grid first: a coarser grid makes the heatmap blocky, so use one only when it has to fit.
 CELL_SIZES = (0.25, 0.5, 1.0)
 # A destination closer than this to the last interval checkpoint replaces that checkpoint.
