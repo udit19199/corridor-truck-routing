@@ -171,6 +171,10 @@ export function LoadingState() {
       aria-live="polite"
     >
       <span className="sr-only">Planning trip</span>
+      <p className="loading-note">
+        Getting truck routes, then the hourly forecast at every checkpoint and
+        heatmap cell. This usually takes 5 to 15 seconds.
+      </p>
       <div className="skeleton skeleton-bar" />
       <div className="skeleton skeleton-card" />
       <div className="skeleton skeleton-card" />

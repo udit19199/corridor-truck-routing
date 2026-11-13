@@ -1405,3 +1405,10 @@ input[type="number"] {
   cursor: wait;
   opacity: 0.6;
 }
+
+.loading-note {
+  margin: 0 0 2px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
