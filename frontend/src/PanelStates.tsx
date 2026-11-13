@@ -151,8 +151,13 @@ export function DemoBanner({
             type="button"
             data-testid={`demo-load-${load}`}
             aria-pressed={loadLb === load}
-            disabled={disabled}
-            onClick={() => onLoad(load)}
+            // aria-disabled, not disabled: a disabled button drops keyboard focus mid-replan.
+            aria-disabled={disabled}
+            onClick={() => {
+              if (!disabled && load !== loadLb) {
+                onLoad(load);
+              }
+            }}
           >
             {formatLoad(load)}
           </button>
@@ -173,7 +178,7 @@ export function LoadingState() {
       <span className="sr-only">Planning trip</span>
       <p className="loading-note">
         Getting truck routes, then the hourly forecast at every checkpoint and
-        heatmap cell. This usually takes 5 to 15 seconds.
+        heatmap cell. This can take several seconds.
       </p>
       <div className="skeleton skeleton-bar" />
       <div className="skeleton skeleton-card" />
