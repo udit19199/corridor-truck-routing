@@ -1,0 +1,45 @@
+# One grouped PR per ecosystem a month, so updates arrive as a few reviewable PRs
+# that CI checks end to end, not a stream of single-package bumps. The 7-day cooldown
+# skips releases younger than a week, the window in which most hijacked packages get pulled.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: uv
+    directory: /backend
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7
+    groups:
+      backend:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directories: [/frontend, /e2e]
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7
+    groups:
+      npm:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7
+    groups:
+      images:
+        patterns: ["*"]
