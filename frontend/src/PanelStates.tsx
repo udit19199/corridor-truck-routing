@@ -1,3 +1,5 @@
+import { DEMO_LOADS, type DemoLoad } from "./demo";
+import { formatLoad } from "./format";
 import { LEVELS } from "./levels";
 
 export function RiskLegend() {
@@ -55,7 +57,7 @@ export function ErrorBanner({
   );
 }
 
-export function EmptyState() {
+export function EmptyState({ onDemo }: { onDemo: () => void }) {
   return (
     <div className="empty">
       <svg
@@ -103,6 +105,64 @@ export function EmptyState() {
         <li>Weather at every checkpoint</li>
         <li>Hourly corridor heatmap</li>
       </ul>
+      <div className="demo-callout">
+        <p>
+          Calm weather everywhere today? Run the storm demo: recorded Dallas to
+          Chicago routes under a scripted storm, to see the risk and load rules
+          change the pick.
+        </p>
+        <button
+          type="button"
+          className="secondary-button"
+          data-testid="demo-start"
+          onClick={onDemo}
+        >
+          Run the storm demo
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function DemoBanner({
+  loadLb,
+  disabled,
+  onLoad,
+}: {
+  loadLb: number;
+  disabled: boolean;
+  onLoad: (loadLb: DemoLoad) => void;
+}) {
+  return (
+    <div className="demo-banner" data-testid="demo-banner">
+      <p>
+        <strong>Storm demo.</strong> Recorded Dallas to Chicago routes under a
+        scripted storm, not live weather. Above 40,000 lb, 35 to 44 mph wind
+        counts as Severe.
+      </p>
+      <div
+        className="segmented demo-loads"
+        role="group"
+        aria-label="Demo load"
+      >
+        {DEMO_LOADS.map((load) => (
+          <button
+            key={load}
+            type="button"
+            data-testid={`demo-load-${load}`}
+            aria-pressed={loadLb === load}
+            // aria-disabled, not disabled: a disabled button drops keyboard focus mid-replan.
+            aria-disabled={disabled}
+            onClick={() => {
+              if (!disabled && load !== loadLb) {
+                onLoad(load);
+              }
+            }}
+          >
+            {formatLoad(load)}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -116,6 +176,10 @@ export function LoadingState() {
       aria-live="polite"
     >
       <span className="sr-only">Planning trip</span>
+      <p className="loading-note">
+        Getting truck routes, then the hourly forecast at every checkpoint and
+        heatmap cell. This can take several seconds.
+      </p>
       <div className="skeleton skeleton-bar" />
       <div className="skeleton skeleton-card" />
       <div className="skeleton skeleton-card" />

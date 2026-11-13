@@ -292,7 +292,7 @@ All times are ISO 8601 UTC. Coordinates are `[lon, lat]`. Errors are `{ "error":
 | `POST /api/plan` | `200 PlanResponse` | 400 validation, 413 body over 2.5 MB, 422 no route, 429 throttle, 502 provider |
 | any other `/api/...` path | none | 404 `{"error": "Not found."}` |
 
-Validation (400): body is a JSON object; origin and destination have a label and valid coordinates and are at least 1 mile apart; departure has a time zone and is between 1 hour ago and 12 days ahead; cargo is a whole number from 1 to 45,000 lb (80,000 lb legal gross minus the 35,000 lb tare added for routing); interval is 10, 25 or 50. Messages are user-facing, for example "Cargo weight must be between 1 and 45,000 lb."
+Validation (400): body is a JSON object; origin and destination have a label and valid coordinates and are at least 1 mile apart; departure has a time zone and is between 1 hour ago and 12 days ahead; cargo is a whole number from 1 to 45,000 lb (80,000 lb legal gross minus the 35,000 lb tare added for routing); interval is 10, 25 or 50; `demo`, when present, is a boolean. Messages are user-facing, for example "Cargo weight must be between 1 and 45,000 lb."
 
 ```ts
 type Level = 0 | 1 | 2 | 3 | 4;              // LOW, MODERATE, HIGH, SEVERE, NO_TRAVEL
@@ -300,6 +300,7 @@ type Level = 0 | 1 | 2 | 3 | 4;              // LOW, MODERATE, HIGH, SEVERE, NO_
 interface PlanRequest {
   origin: Place; destination: Place;         // Place = { label: string; lon: number; lat: number }
   departure: string; load_lb: number; interval_mi: 10 | 25 | 50;
+  demo?: boolean;                             // true: recorded Dallas to Chicago routes and the scripted storm (5.5); origin and destination are validated but do not change the routes
 }
 
 interface PlanResponse {
@@ -397,6 +398,8 @@ Live cell counts at 0.25° / 0.5° / 1°: Dallas to Chicago 366 / 136 / 64, so i
 | Open-Meteo | `hourly=wind_speed_10m,wind_gusts_10m,rain,showers,snowfall`, mph and inch, GMT, `start_hour`/`end_hour`, 100 locations per request, up to 4 requests in parallel | a null takes the nearest valid hour within 3 hours, otherwise the plan fails; a series that does not cover the requested hours is an error, never padded; concurrent plans share in-flight fetches per cell |
 
 Route names are the two roads with the most distance on the route, made distinct across the three routes.
+
+**Storm demo.** A plan with `demo: true` uses the fixture providers whatever the environment says: the three recorded Dallas to Chicago routes and the scripted storm field, which moves with the forecast hour, so it looks the same on any date. Live weather is often calm along a whole corridor, which leaves every checkpoint Low and hides the rules. The demo lets a reviewer see the load rule change the pick (Route A at 20,000 lb, Route B at 45,000 lb) on any day. The UI labels it as not live weather, and its load toggle replans only the demo.
 
 ### 5.6 Front end rendering
 

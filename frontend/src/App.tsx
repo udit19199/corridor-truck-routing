@@ -14,6 +14,7 @@ import {
   type PlanResponse,
 } from "./api";
 import CheckpointList from "./CheckpointList";
+import { demoRequest, type DemoLoad } from "./demo";
 import {
   formatClock,
   formatLoad,
@@ -24,6 +25,7 @@ import HourSlider from "./HourSlider";
 import type { MapApi } from "./mapHandoff";
 import MapUnavailable from "./MapUnavailable";
 import {
+  DemoBanner,
   EmptyState,
   ErrorBanner,
   LoadingState,
@@ -101,6 +103,11 @@ export default function App() {
   }, []);
 
   const { request, runPlan, cancel: cancelPlan } = usePlanRequest(handlePlan);
+
+  const runDemo = useCallback(
+    (loadLb: DemoLoad) => runPlan(demoRequest(loadLb)),
+    [runPlan],
+  );
 
   const handleSelectRoute = useCallback((routeId: string) => {
     pendingFocusRef.current = null;
@@ -189,7 +196,12 @@ export default function App() {
 
           <TripForm
             loading={request.status === "loading"}
-            planIntervalMi={shown?.plan.interval_mi ?? null}
+            // A demo plan is not the form's trip, so the spacing buttons do not replan it.
+            planIntervalMi={
+              shown === null || shown.request.demo === true
+                ? null
+                : shown.plan.interval_mi
+            }
             onSubmit={runPlan}
             onCancel={cancelPlan}
           />
@@ -199,7 +211,15 @@ export default function App() {
           {shown !== null && (
             <>
               {request.status === "loading" && <RefreshState />}
-              <PlanSummary shown={shown} />
+              {shown.request.demo === true ? (
+                <DemoBanner
+                  loadLb={shown.plan.load_lb}
+                  disabled={request.status === "loading"}
+                  onLoad={runDemo}
+                />
+              ) : (
+                <PlanSummary shown={shown} />
+              )}
               <RouteCards
                 plan={shown.plan}
                 selectedId={shown.selectedId}
@@ -225,7 +245,9 @@ export default function App() {
             </>
           )}
 
-          {shown === null && request.status !== "loading" && <EmptyState />}
+          {shown === null && request.status !== "loading" && (
+            <EmptyState onDemo={() => runDemo(45_000)} />
+          )}
         </div>
       </aside>
 

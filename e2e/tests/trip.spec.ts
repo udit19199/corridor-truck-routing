@@ -50,6 +50,32 @@ test("a heavier load turns 35-44 mph wind into Severe and changes the recommenda
   await expect(page.locator('[data-testid="checkpoint-row"][data-level="3"]').first()).toBeVisible();
 });
 
+test("the storm demo plans without the form and its load toggle flips the pick", async ({ page }) => {
+  await page.goto("/?debug=1");
+  const plans: string[] = [];
+  page.on("request", (req) => {
+    if (req.url().includes("/api/plan")) plans.push(req.postData() ?? "");
+  });
+
+  await page.getByTestId("demo-start").click();
+  await expect(page.getByTestId("route-card")).toHaveCount(3);
+  await expect(page.getByTestId("demo-banner")).toContainText("not live weather");
+  await expect(page.getByTestId("demo-load-45000")).toHaveAttribute("aria-pressed", "true");
+  const heavyPick = await recommendedId(page);
+  await expect(page.getByTestId("recommendation-reason")).toContainText("Severe");
+
+  await page.getByTestId("demo-load-20000").click();
+  await expect(page.getByTestId("demo-load-20000")).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(() => recommendedId(page)).not.toBe(heavyPick);
+  expect(plans.length).toBe(2);
+  expect(plans.every((body) => JSON.parse(body).demo === true)).toBe(true);
+
+  // The form's spacing buttons belong to the form's trip, so they do not replan the demo.
+  await page.getByTestId("interval-10").click();
+  await page.waitForTimeout(300);
+  expect(plans.length).toBe(2);
+});
+
 test("checkpoint interval controls spacing and ETAs rise along the route", async ({ page }) => {
   await planTrip(page, 20000);
   const at25 = await checkpointEtas(page);
@@ -128,6 +154,21 @@ test("the API rejects an interval outside 10, 25 and 50", async ({ request }) =>
   });
   expect(res.status()).toBe(400);
   expect((await res.json()).error).toMatch(/interval/i);
+});
+
+test("the API rejects a demo flag that is not a boolean", async ({ request }) => {
+  const res = await request.post("/api/plan", {
+    data: {
+      origin: { label: "Dallas, TX", lon: -96.797, lat: 32.7767 },
+      destination: { label: "Chicago, IL", lon: -87.6298, lat: 41.8781 },
+      departure: new Date(Date.now() + 3600_000).toISOString(),
+      load_lb: 20000,
+      interval_mi: 25,
+      demo: "yes",
+    },
+  });
+  expect(res.status()).toBe(400);
+  expect((await res.json()).error).toBe("demo must be true or false.");
 });
 
 type ApiCheckpoint = { mile: number; lon: number; lat: number; eta: string; covers_mi: number; level: number };
