@@ -99,10 +99,14 @@ LOGGING = {
             "formatter": "console",
             "stream": "ext://sys.stdout",
         },
+        "discard": {"class": "logging.NullHandler"},
     },
     "root": {"handlers": ["console"], "level": "INFO"},
     "loggers": {
         "django.request": {"handlers": ["console"], "level": "ERROR", "propagate": False},
+        # Bots probing a public URL with other Host headers would print a traceback per
+        # request. The 400 still shows in gunicorn's access log.
+        "django.security.DisallowedHost": {"handlers": ["discard"], "propagate": False},
     },
 }
 

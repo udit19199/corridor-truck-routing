@@ -216,6 +216,11 @@ def _tomtom_routes(
             "maxAlternatives": 2,
             "alternativeType": "anyRoute",
             "departAt": depart_at.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            # Live traffic made TomTom drop its alternatives for some departures (Dallas to
+            # Chicago at 09:30Z: 1 route with traffic, 3 without). Historical speeds for the
+            # departure hour still shape the ETAs, and live traffic now says little about a
+            # truck that is still hours from most of its route.
+            "traffic": "false",
             "instructionsType": "coded",
         },
         "The TomTom routing service",

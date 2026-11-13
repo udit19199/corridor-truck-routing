@@ -290,6 +290,7 @@ All times are ISO 8601 UTC. Coordinates are `[lon, lat]`. Errors are `{ "error":
 | `GET /api/health` | `200 {"ok": true}` | none |
 | `GET /api/geocode?q=dal` | `200 [{label, lon, lat}]`, up to 5, US only; `[]` for under 2 characters | 429 throttle, 502 provider |
 | `POST /api/plan` | `200 PlanResponse` | 400 validation, 413 body over 2.5 MB, 422 no route, 429 throttle, 502 provider |
+| any other `/api/...` path | none | 404 `{"error": "Not found."}` |
 
 Validation (400): body is a JSON object; origin and destination have a label and valid coordinates and are at least 1 mile apart; departure has a time zone and is between 1 hour ago and 12 days ahead; cargo is a whole number from 1 to 45,000 lb (80,000 lb legal gross minus the 35,000 lb tare added for routing); interval is 10, 25 or 50. Messages are user-facing, for example "Cargo weight must be between 1 and 45,000 lb."
 
@@ -391,7 +392,7 @@ Live cell counts at 0.25° / 0.5° / 1°: Dallas to Chicago 366 / 136 / 64, so i
 
 | Call | Request | Notes |
 |---|---|---|
-| TomTom routing | `travelMode=truck`, `vehicleCommercial=true`, `vehicleWeight` = (cargo + 35,000 lb) in kg, `maxAlternatives=2`, `alternativeType=anyRoute`, `departAt` = max(departure, now + 1 min), `instructionsType=coded` | a 400 whose error code means no route (`NO_ROUTE_FOUND`, `MAP_MATCHING_FAILURE`, `CANNOT_RESTORE_BASEROUTE`) is `NoRouteError`, 422; any other 400 is our own bad request, 502 |
+| TomTom routing | `travelMode=truck`, `vehicleCommercial=true`, `vehicleWeight` = (cargo + 35,000 lb) in kg, `maxAlternatives=2`, `alternativeType=anyRoute`, `departAt` = max(departure, now + 1 min), `traffic=false`, `instructionsType=coded`. Live traffic made TomTom return only 1 route for some departures (Dallas to Chicago at 09:30 UTC: 1 with traffic, 3 without); historical speeds for the departure hour still shape the ETAs | a 400 whose error code means no route (`NO_ROUTE_FOUND`, `MAP_MATCHING_FAILURE`, `CANNOT_RESTORE_BASEROUTE`) is `NoRouteError`, 422; any other 400 is our own bad request, 502 |
 | TomTom search | `countrySet=US`, `typeahead=true`, `limit=5`, `idxSet=Geo,PAD` | cached 1 day per query |
 | Open-Meteo | `hourly=wind_speed_10m,wind_gusts_10m,rain,showers,snowfall`, mph and inch, GMT, `start_hour`/`end_hour`, 100 locations per request, up to 4 requests in parallel | a null takes the nearest valid hour within 3 hours, otherwise the plan fails; a series that does not cover the requested hours is an error, never padded; concurrent plans share in-flight fetches per cell |
 
