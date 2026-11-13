@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: truck-weather-routing
+    name: corridor-truck-routing
     runtime: docker
     plan: free
     healthCheckPath: /api/health
