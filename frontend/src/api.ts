@@ -94,6 +94,8 @@ export interface PlanRequest {
   departure: string;
   load_lb: number;
   interval_mi: IntervalMi;
+  /** Plan on the recorded routes and scripted storm instead of live providers. */
+  demo?: boolean;
 }
 
 function isErrorPayload(payload: unknown): payload is { error: string } {
