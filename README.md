@@ -2,7 +2,7 @@
 
 A driver enters an origin, a destination, a departure time and a load weight. The app returns up to three truck routes, checks the forecast at every checkpoint for the hour the truck will reach it, scores each checkpoint with Spotter's risk and load rules, and recommends the safest route. A 0–48 hour slider plays the forecast along the whole corridor.
 
-Live app: _added after deploy_
+Live app: https://corridor-truck-routing.onrender.com (free Render plan; if it has been idle, the first load can take up to a minute)
 
 ![Plan for Dallas to Chicago with a 45,000 lb load](docs/plan.png)
 
