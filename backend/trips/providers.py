@@ -582,6 +582,15 @@ def _chunks[T](items: list[T], size: int) -> Iterator[list[T]]:
         yield items[start : start + size]
 
 
+def demo_providers() -> Providers:
+    """Recorded Dallas to Chicago routes under the scripted storm, for the in-app demo.
+
+    Live weather is often calm everywhere, which hides the risk and load rules. The demo
+    shows them on any day, whatever ROUTING_PROVIDER and WEATHER_PROVIDER say.
+    """
+    return Providers(geocode=_fixture_geocode, routes=_fixture_routes_for, hourly=_fixture_hourly)
+
+
 def get_providers() -> Providers:
     routing = os.environ.get("ROUTING_PROVIDER", "tomtom").strip().lower()
     weather = os.environ.get("WEATHER_PROVIDER", "openmeteo").strip().lower()
