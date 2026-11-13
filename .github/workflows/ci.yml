@@ -146,7 +146,7 @@ jobs:
             --env SECRET_KEY=ci-only --env ALLOWED_HOSTS=localhost \
             --env ROUTING_PROVIDER=fixture --env WEATHER_PROVIDER=fixture \
             corridor:ci
-          curl --fail --silent --show-error --retry 10 --retry-connrefused --retry-delay 2 \
+          curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 2 \
             http://localhost:8000/api/health
           curl --fail --silent --show-error http://localhost:8000/ | grep --quiet '<div id="root">'
           test "$(docker exec app id -u)" = 10001
