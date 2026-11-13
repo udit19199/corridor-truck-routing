@@ -461,15 +461,15 @@ Open-Meteo is the binding limit, about 3x tighter than TomTom. Our own throttle 
 ## 10. Observability
 
 - Logs go to stdout and Render's log stream. Each plan logs `routes`, `cells`, `cell_deg` and `elapsed_ms`, without places. Each provider failure logs service, HTTP status and elapsed time. Gunicorn writes an access log.
-- What we would alert on with a log-based monitor: provider error rate over 5% in 10 minutes, any Open-Meteo 429, plan p95 over 5 s, and the keep-warm ping failing.
-- `/api/health` is the Render health check and the keep-warm target.
+- What we would alert on with a log-based monitor: provider error rate over 5% in 10 minutes, any Open-Meteo 429, and plan p95 over 5 s.
+- `/api/health` is the Render health check and the CI smoke test's target.
 
 ## 11. Deployment and rollback
 
 - One Docker image: Node 22 builds the front end, Python 3.13 with uv installs locked dependencies, Gunicorn serves Django, WhiteNoise serves the built files.
-- Render builds from `render.yaml` on push to `main`, checks `/api/health`, and only then switches traffic.
+- Render builds from `render.yaml` once a `main` commit passes CI (`autoDeployTrigger: checksPass`), checks `/api/health`, and only then switches traffic.
 - Rollback: redeploy the previous successful deploy from Render's dashboard. There is no database or migration, so rollback is always safe.
-- A GitHub Action pings `/api/health` every 10 minutes so the free instance does not sleep.
+- The free instance sleeps after 15 idle minutes, and the next request waits up to a minute while it wakes. A scheduled GitHub Action ping was tried and dropped: GitHub ran the 10-minute schedule only every 4 to 8 hours. The fix is a paid instance (no sleep, and 5x the CPU of the free 0.1) or an external uptime monitor.
 
 ## 12. Testing
 
