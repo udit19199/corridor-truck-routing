@@ -1,0 +1,155 @@
+name: CI
+
+# Render deploys main only after these checks pass (autoDeployTrigger in render.yaml),
+# so a red run here is what keeps a broken commit off the live app.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  workflows:
+    name: Workflows (actionlint, zizmor)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: false
+      - name: actionlint
+        run: uvx --from actionlint-py==1.7.12.25 actionlint
+      - name: zizmor
+        run: uvx zizmor==1.32.0 --format=github .github/
+
+  backend:
+    name: Backend (ruff, ty, fixture check)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      ROUTING_PROVIDER: fixture
+      WEATHER_PROVIDER: fixture
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - run: uv sync --frozen
+      - name: Lint
+        run: uv run ruff check --output-format=github .
+      - name: Format
+        run: uv run ruff format --check .
+      - name: Type check
+        run: uv run ty check trips config
+      - name: Django system checks
+        run: uv run python manage.py check
+      - name: Fixture pipeline check
+        run: uv run python scripts/check_fixture.py
+
+  frontend:
+    name: Frontend (tsc, build)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Type check and build
+        run: npm run build
+
+  e2e:
+    name: End-to-end (Playwright, fixture mode)
+    needs: [backend, frontend]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            e2e/package-lock.json
+      - name: Install dependencies
+        run: |
+          (cd backend && uv sync --frozen)
+          npm ci --prefix frontend
+          npm ci --prefix e2e
+      - name: Install Chromium
+        working-directory: e2e
+        run: npx playwright install --with-deps chromium
+      - name: Run Playwright
+        working-directory: e2e
+        run: npm test
+      - name: Upload traces
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-traces
+          path: e2e/test-results/
+          retention-days: 7
+
+  image:
+    name: Docker image (build and smoke test)
+    needs: [backend, frontend]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          tags: corridor:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test
+        # Same image Render runs, started the way Render starts it, on fixture providers.
+        run: |
+          docker run --detach --name app --publish 8000:8000 \
+            --env SECRET_KEY=ci-only --env ALLOWED_HOSTS=localhost \
+            --env ROUTING_PROVIDER=fixture --env WEATHER_PROVIDER=fixture \
+            corridor:ci
+          curl --fail --silent --show-error --retry 10 --retry-connrefused --retry-delay 2 \
+            http://localhost:8000/api/health
+          curl --fail --silent --show-error http://localhost:8000/ | grep --quiet '<div id="root">'
+          test "$(docker exec app id -u)" = 10001
+      - name: Container logs
+        if: always()
+        run: docker logs app || true
