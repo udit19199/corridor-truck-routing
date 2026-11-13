@@ -1,5 +1,7 @@
 # Corridor: weather-aware truck routing
 
+[![CI](https://github.com/udit19199/corridor-truck-routing/actions/workflows/ci.yml/badge.svg)](https://github.com/udit19199/corridor-truck-routing/actions/workflows/ci.yml)
+
 A driver enters an origin, a destination, a departure time and a load weight. The app returns up to three truck routes, checks the forecast at every checkpoint for the hour the truck will reach it, scores each checkpoint with Spotter's risk and load rules, and recommends the safest route. A 0–48 hour slider plays the forecast along the whole corridor.
 
 Live app: https://corridor-truck-routing.onrender.com (free Render plan; if it has been idle, the first load can take up to a minute)
@@ -63,6 +65,20 @@ npm test
 ```
 
 They cover the recommendation, the load rule flipping it at exactly 40,001 lb, checkpoint placement and coverage, checkpoints matching the heatmap at their hour, ETA order, the slider repainting with no network request, and input validation.
+
+## CI and deploys
+
+Every push and pull request runs [`ci.yml`](.github/workflows/ci.yml):
+
+| Job | What it checks |
+|---|---|
+| Workflows | actionlint and zizmor on the workflow files |
+| Backend | ruff lint and format, ty type check, Django system checks, the fixture pipeline script |
+| Frontend | `tsc` and the production build |
+| End-to-end | the Playwright suite above, in fixture mode; traces are uploaded when it fails |
+| Docker image | builds the image Render runs, starts it, and checks health, the served page and the non-root user |
+
+Render deploys `main` only after all of these pass (`autoDeployTrigger: checksPass` in `render.yaml`), so a red build never reaches the live app. Actions are pinned to commit SHAs, jobs get a read-only token, and Dependabot sends one grouped update PR per ecosystem each month, skipping releases younger than a week. A scheduled workflow pings `/api/health` every 10 minutes so the free instance stays awake.
 
 ## Stack
 

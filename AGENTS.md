@@ -11,6 +11,7 @@ Weather-aware truck routing: Django API (`backend/`) plus React + MapLibre UI (`
 | Fixture sanity script | `cd backend && ROUTING_PROVIDER=fixture WEATHER_PROVIDER=fixture uv run python scripts/check_fixture.py` |
 | Backend type check | `cd backend && uv run ty check trips config` |
 | End-to-end tests | `cd e2e && npm test` (builds the frontend, starts Django in fixture mode) |
+| Workflow lint | `uvx --from actionlint-py actionlint && uvx zizmor .github/` |
 
 ## Verification by change type
 
@@ -23,6 +24,8 @@ Weather-aware truck routing: Django API (`backend/`) plus React + MapLibre UI (`
 | `e2e/**` | e2e tests pass twice in a row |
 
 ## Rules
+
+- CI (`.github/workflows/ci.yml`) runs every check in the table above plus a Docker build and smoke test. Render deploys `main` only when CI passes, so never push to `main` with a failing check. Pin new actions to a commit SHA with the version in a comment.
 
 - Risk thresholds and load rules live only in `backend/trips/rules.py`. The API sends levels as numbers; the front end maps them to names and colours only in `frontend/src/levels.ts`. Never copy thresholds into the front end.
 - Never put an API key in code, fixtures, logs or the browser bundle. Keys come from env vars; `backend/.env` is ignored by git.
