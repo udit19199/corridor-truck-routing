@@ -1,6 +1,8 @@
 # One grouped PR per ecosystem a month, so updates arrive as a few reviewable PRs
 # that CI checks end to end, not a stream of single-package bumps. The 7-day cooldown
 # skips releases younger than a week, the window in which most hijacked packages get pulled.
+# Major versions (Django, React, TypeScript, Node) are migrations, not updates: they get
+# their own planned change, so Dependabot proposes minor and patch releases only.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -9,6 +11,9 @@ updates:
       interval: monthly
     cooldown:
       default-days: 7
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       actions:
         patterns: ["*"]
@@ -19,6 +24,9 @@ updates:
       interval: monthly
     cooldown:
       default-days: 7
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       backend:
         patterns: ["*"]
@@ -29,10 +37,12 @@ updates:
       interval: monthly
     cooldown:
       default-days: 7
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       npm:
         patterns: ["*"]
-        update-types: [minor, patch]
 
   - package-ecosystem: docker
     directory: /
@@ -40,6 +50,9 @@ updates:
       interval: monthly
     cooldown:
       default-days: 7
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       images:
         patterns: ["*"]
