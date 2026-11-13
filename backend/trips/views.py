@@ -261,5 +261,9 @@ def _iso(value: datetime) -> str:
     return value.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def api_not_found(_request: HttpRequest) -> JsonResponse:
+    return _error("Not found.", 404)
+
+
 def _error(message: str, status: int) -> JsonResponse:
     return JsonResponse({"error": message}, status=status)
