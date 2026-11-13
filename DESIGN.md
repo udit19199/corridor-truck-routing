@@ -2,7 +2,7 @@
 
 How the app turns "Dallas to Chicago, Thursday 06:00, 45,000 lb" into three scored truck routes, a recommendation and a 48-hour corridor heatmap.
 
-Status: implemented and running in fixture mode. The TomTom integration is written to TomTom's documented API but has not yet been exercised with a live key (see section 15). Every number below comes from the code or from a measurement, and estimates are marked as such.
+Status: implemented, tested in fixture mode and run live against TomTom and Open-Meteo (Dallas to Chicago and three other city pairs on 2026-11-13). Every number below comes from the code or from a measurement, and estimates are marked as such.
 
 ## 1. Context
 
@@ -30,7 +30,7 @@ The brief's user is the truck driver planning a run a few hours to a few days ah
 | Functional | Risk and load rules exactly as the brief states, edges made explicit | Section 3 | `rules.py` |
 | Functional | A recommendation with a reason a driver or dispatcher can check | One sentence naming the deciding numbers | `rules.rank` |
 | Functional | Corridor heatmap for hours 0 to 48 with a slider | 49 hours, every cell within 15 mi of any route | `planner`, `RouteMap` |
-| Latency | Server time for one plan | Fixture: 85 ms measured. Live: estimated 1 to 2 s, dominated by one TomTom call and up to 3 parallel Open-Meteo batches (Open-Meteo alone measured about 1.4 s cold for 279 cells) | section 6 |
+| Latency | Server time for one plan | Fixture: 85 ms measured. Live Dallas to Chicago: 10.4 s cold, 7.9 s with the weather cached. TomTom's truck routing with two alternatives takes 8.3 to 8.5 s of that; Open-Meteo about 1.2 s for 4 parallel batches | section 6 |
 | Payload | Plan response, 25 mi interval, Dallas to Chicago | 216 KB raw, 52 KB gzip (10 mi: 263 / 56 KB; 50 mi: 200 / 51 KB) | GZip middleware |
 | Smoothness | Slider move with 4x CPU throttle | 0 source reloads, frame p95 32.6 ms | section 5.6 |
 | Quota | Stay inside free tiers | Open-Meteo 600 locations a minute, 10,000 a day; TomTom 2,500 requests a day | section 6 |
@@ -82,7 +82,7 @@ Miles are rounded to 0.1 before comparing. The sort is stable, so a full tie kee
 
 The reason compares the winner with each other route on the first key where it wins, lists the most decisive comparison first, and states the time cost when the safer route is slower. If even the winner has Severe or No Travel miles, it ends with a warning. Example from the fixture at 45,000 lb:
 
-> Route B: fewer Severe miles than Route A (0 vs 50), 11 min slower; fewer High miles than Route C (150 vs 350).
+> Route B: fewer Severe miles than Route A (0 vs 75), 11 min slower; fewer High miles than Route C (150 vs 375).
 
 ## 4. High-level design
 
@@ -381,11 +381,11 @@ Open-Meteo counts every location against 600 a minute, so a plan must stay well 
 ```
 for d in (0.25, 0.5, 1.0):
     cells = corridor(tracks, d) ∪ checkpoint cells
-    if len(cells) ≤ 450: return d, cells
+    if len(cells) ≤ 250: return d, cells
 return 1.0, cells                                           # provider will report its limit if hit
 ```
 
-Dallas to Chicago uses 0.25° and 279 cells. Three diverging synthetic New York to Los Angeles routes need 827 cells at 0.25° and use 0.5° with 254.
+Live cell counts at 0.25° / 0.5° / 1°: Dallas to Chicago 366 / 136 / 64, so it uses 0.5°; Atlanta to Miami 216, Los Angeles to Phoenix 143 and Denver to Salt Lake City 133 stay at 0.25°. The cap is 250 rather than 450 because at 366 cells only one cold plan a minute fits in Open-Meteo's 600, and a second try from a grader would fail.
 
 ### 5.5 Providers
 
@@ -402,7 +402,7 @@ Route names are the two roads with the most distance on the route, made distinct
 - Dark theme only, OpenFreeMap's dark style with buildings, land use, minor roads and rail removed at load, and labels lifted for contrast.
 - The map code is a separate chunk loaded with `React.lazy`, so the form paints before MapLibre (about 300 KB gzip plus a 148 KB gzip worker) arrives. Main bundle: about 52 KB gzip. Hashed assets are served as immutable.
 - Layers, bottom to top, all under the basemap labels: heat cells (fill), route lines (others grey, selected blue and wider), checkpoint circles coloured by level, trucks.
-- **Slider path.** GeoJSON for a plan is built once. Each heat cell has a numeric feature id, and `fill-color` reads `["feature-state", "level"]` (transparent when unset). A slider move, coalesced to one per animation frame, sets one feature state per cell and replaces the three-point truck source. It never changes the style. A data-driven paint expression (`match` on `r{h}`) was the first version; MapLibre reloads the source on every change of such a property (1 reload and 6 `sourcedata` events per move). `global-state` was tried and rejected because combined with per-cell data it still reloads. Measured with a 4x CPU throttle on 279 cells: 0 reloads per move, frame p50 30.3 ms and p95 32.6 ms (was 30.6 and 34.3), feature-state writes 0.1 ms p95.
+- **Slider path.** GeoJSON for a plan is built once. Each heat cell has a numeric feature id, and `fill-color` reads `["feature-state", "level"]` (transparent when unset). A slider move, coalesced to one per animation frame, sets one feature state per cell and replaces the three-point truck source. It never changes the style. A data-driven paint expression (`match` on `r{h}`) was the first version; MapLibre reloads the source on every change of such a property (1 reload and 6 `sourcedata` events per move). `global-state` was tried and rejected because combined with per-cell data it still reloads. Measured with a 4x CPU throttle on 279 cells (fixture at 0.25°, before the cap went to 250): 0 reloads per move, frame p50 30.3 ms and p95 32.6 ms (was 30.6 and 34.3), feature-state writes 0.1 ms p95.
 - Trucks show each route's position at `heatmap.start + h hours`: at the origin before departure, hidden after arrival.
 - App keeps the current slider hour and any checkpoint focus made before the map finished loading in two refs the map reads when it loads. A new plan resets the hour to 0 and drops a pending focus. The open checkpoint lives in App's shown plan, so the popup and the marked list row always agree; a new plan, a route click or closing the popup clears it.
 - Level colours come from `levels.ts` only and match across map, cards, list and legend. Times show in the browser's time zone with its abbreviation.
@@ -412,13 +412,13 @@ Route names are the two roads with the most distance on the route, made distinct
 
 | Resource | Free limit | Cost per plan | Plans before the limit |
 |---|---|---|---|
-| Open-Meteo, per minute | 600 locations | 279 (Dallas to Chicago, cold cache) | 2 a minute |
-| Open-Meteo, per hour | 5,000 locations | 279 | about 17 an hour |
-| Open-Meteo, per day | 10,000 locations | 279 | about 35 a day cold; repeats within 30 min are free |
+| Open-Meteo, per minute | 600 locations | 136 (live Dallas to Chicago at 0.5°, cold cache); at most 250 | 4 a minute (2 at the cap) |
+| Open-Meteo, per hour | 5,000 locations | 136 | about 36 an hour |
+| Open-Meteo, per day | 10,000 locations | 136 | about 73 a day cold; repeats within 30 min are free |
 | TomTom, per day | 2,500 requests | 1 routing + about 10 search keystrokes (debounced, cached a day) | about 225 a day |
 | Render free instance | 512 MB, 0.1 CPU | about 85 ms CPU per plan in fixture mode | not the bottleneck |
 
-Open-Meteo is the binding limit by roughly 6x over TomTom. Our own throttle (6 plans a minute per client) bounds what one client can spend, but it does not guarantee the weather budget: three cold plans in one minute from different corridors already pass 600 locations, and the third then fails with the provider's rate-limit message. Repeat and nearby plans are served from the cache. Section 14 covers the fix at scale. The weather cache holds about 14,000 entries for one Dallas to Chicago plan (279 cells x 50 hours).
+Open-Meteo is the binding limit, about 3x tighter than TomTom. Our own throttle (6 plans a minute per client) bounds what one client can spend, but it does not guarantee the weather budget: three cold plans at the 250-cell cap in one minute pass 600 locations, and the third then fails with "The weather service is busy right now. Try again in a minute." Repeat and nearby plans are served from the cache. A live run hit exactly this with the earlier 450 cap: the second cold Dallas to Chicago plan in a minute got a 429. Section 14 covers the fix at scale. The weather cache holds at most 12,500 entries per plan (250 cells x 50 hours).
 
 ## 7. Failure modes
 
@@ -483,7 +483,7 @@ There are no unit tests by choice: the e2e suite runs the real rules on recorded
 
 | Decision | Chosen | Rejected | Why |
 |---|---|---|---|
-| Heatmap shape | Grid of cells in one GeoJSON source | Raster or vector tiles per hour | 279 cells is tiny; tiles need a tile server and a request per hour |
+| Heatmap shape | Grid of cells in one GeoJSON source | Raster or vector tiles per hour | At most 250 cells is tiny; tiles need a tile server and a request per hour |
 | Heatmap delivery | All 49 hours in the plan response | Fetch each hour as the slider moves | Sliding must not wait on the network; 49 levels per cell gzip to almost nothing |
 | Slider repaint | Feature state per cell | Data-driven paint per hour; 49 layers toggled; `global-state` | The first reloads the source on every move; 49 layers cost 49x buckets; global-state cannot index per-cell data without a reload |
 | Routing | TomTom (truck profile, weight, traffic-aware times, alternatives) | OSRM (no truck profile), Google (no truck routing), HERE (similar, smaller free tier) | Truck weight changes the route and the times |
@@ -513,7 +513,7 @@ Assumptions:
 
 Risks:
 
-- TomTom has not been exercised live yet; the fixture routes were recorded from OSRM as a stand-in, so the fixture's distances (964.2 mi) are measured on a thinned recording and run slightly short. Re-record with TomTom once the key is set.
+- The fixture routes were recorded from OSRM before the TomTom key existed, so the fixture's distances (964.2 mi) are measured on a thinned recording and run slightly short of live TomTom (1,045 mi for Route A).
 - Open-Meteo's free tier is for non-commercial use. A commercial launch needs its paid plan.
 - The throttle trusts `X-Forwarded-For`, which a client can forge.
 

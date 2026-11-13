@@ -171,12 +171,12 @@ test("the load rule flips exactly above 40,000 lb", async ({ request }) => {
   // Route A meets 35-44 mph wind: High at 40,000 lb, Severe one pound later.
   expect(atLimit.recommended_id).toBe("A");
   expect(routeA(atLimit).summary.miles_by_level[SEVERE]).toBe(0);
-  expect(routeA(atLimit).summary.miles_by_level[HIGH]).toBe(50);
+  expect(routeA(atLimit).summary.miles_by_level[HIGH]).toBe(75);
 
   expect(overLimit.recommended_id).toBe("B");
-  expect(routeA(overLimit).summary.miles_by_level[SEVERE]).toBe(50);
+  expect(routeA(overLimit).summary.miles_by_level[SEVERE]).toBe(75);
   expect(overLimit.reason).toBe(
-    "Route B: fewer Severe miles than Route A (0 vs 50), 11 min slower; fewer High miles than Route C (150 vs 350).",
+    "Route B: fewer Severe miles than Route A (0 vs 75), 11 min slower; fewer High miles than Route C (150 vs 375).",
   );
 });
 

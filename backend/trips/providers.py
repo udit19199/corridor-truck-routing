@@ -548,7 +548,7 @@ def _get_json(
                 raise NoRouteError() from None
             raise ProviderError(f"{service} rejected the request.") from None
         if status == 429:
-            raise ProviderError(f"{service} is over its request limit. Try again later.") from None
+            raise ProviderError(f"{service} is busy right now. Try again in a minute.") from None
         raise ProviderError(f"{service} is unavailable right now.") from None
 
     try:
