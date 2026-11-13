@@ -76,7 +76,7 @@ export default function TripForm({
   const intervalNote =
     planIntervalMi === null
       ? "Choose the spacing between checkpoints for this trip."
-      : "Picking another spacing plans the trip again with the values in this form. If a value is invalid, it only sets the choice and the trip on screen keeps its spacing.";
+      : "Picking another spacing replans this trip with the values above.";
   const showMessage = (field: FieldKey) => submitAttempted || touched[field];
 
   function markTouched(field: FieldKey) {
