@@ -13,7 +13,7 @@ from django.views.decorators.http import require_GET, require_POST
 from trips.domain import Checkpoint, Place, Plan, Route
 from trips.geometry import haversine
 from trips.planner import PlanRequest, plan_trip
-from trips.providers import NoRouteError, ProviderError, get_providers
+from trips.providers import NoRouteError, ProviderError, demo_providers, get_providers
 
 logger = logging.getLogger(__name__)
 
@@ -72,18 +72,20 @@ def plan(request: HttpRequest) -> JsonResponse:
 
     try:
         plan_request = _parse_request(payload)
+        demo = _parse_demo(payload)
     except ValueError as exc:
         return _error(str(exc), 400)
 
     started = monotonic()
     try:
-        result = plan_trip(plan_request, get_providers())
+        result = plan_trip(plan_request, demo_providers() if demo else get_providers())
     except NoRouteError as exc:
         return _error(str(exc), 422)
     except ProviderError as exc:
         return _error(str(exc), 502)
     logger.info(
-        "plan routes=%d cells=%d cell_deg=%s elapsed_ms=%d",
+        "plan demo=%s routes=%d cells=%d cell_deg=%s elapsed_ms=%d",
+        demo,
         len(result.routes),
         len(result.heatmap.cells),
         result.heatmap.cell_deg,
@@ -116,6 +118,13 @@ def _parse_request(payload: dict[str, object]) -> PlanRequest:
         load_lb=load_lb,
         interval_mi=interval_mi,
     )
+
+
+def _parse_demo(payload: dict[str, object]) -> bool:
+    demo = payload.get("demo", False)
+    if not isinstance(demo, bool):
+        raise ValueError("demo must be true or false.")
+    return demo
 
 
 def _parse_place(payload: dict[str, object], field: str, name: str) -> Place:
