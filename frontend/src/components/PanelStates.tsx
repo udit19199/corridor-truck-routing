@@ -60,17 +60,8 @@ export function ErrorBanner({
 export function EmptyState({ onDemo }: { onDemo: () => void }) {
   return (
     <div className="empty">
-      <h2>Plan a weather-safe run</h2>
-      <p>
-        Pick two US cities, a departure time and a load. You’ll get three routes
-        ranked by risk, with the forecast along each corridor.
-      </p>
+      <p>Enter a trip to get the safest of three truck routes.</p>
       <div className="demo-callout">
-        <p>
-          Calm weather everywhere today? Run the storm demo: recorded Dallas to
-          Chicago routes under a scripted storm, to see the risk and load rules
-          change the pick.
-        </p>
         <button
           type="button"
           className="secondary-button"
@@ -96,9 +87,7 @@ export function DemoBanner({
   return (
     <div className="demo-banner" data-testid="demo-banner">
       <p>
-        <strong>Storm demo.</strong> Recorded Dallas to Chicago routes under a
-        scripted storm, not live weather. Switch the load and the same wind
-        changes level.
+        <strong>Storm demo.</strong> Dallas to Chicago, not live weather.
       </p>
       <div
         className="segmented demo-loads"
@@ -137,8 +126,7 @@ export function LoadingState() {
     >
       <span className="sr-only">Planning trip</span>
       <p className="loading-note">
-        Getting truck routes, then the hourly forecast at every checkpoint and
-        heatmap cell. This can take several seconds.
+        Getting routes and weather. This can take several seconds.
       </p>
       <div className="skeleton skeleton-bar" />
       <div className="skeleton skeleton-card" />

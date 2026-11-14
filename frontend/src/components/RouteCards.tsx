@@ -4,7 +4,6 @@ import {
   formatDistance,
   formatDuration,
   formatMiles,
-  formatRisk,
 } from "../lib/format";
 import {
   levelInfo,
@@ -31,7 +30,6 @@ interface RouteCardProps {
   route: Route;
   recommended: boolean;
   selected: boolean;
-  reason: string;
   onSelect: (routeId: string) => void;
 }
 
@@ -39,12 +37,10 @@ function RouteCard({
   route,
   recommended,
   selected,
-  reason,
   onSelect,
 }: RouteCardProps) {
   const levelMiles = milesByLevel(route.summary.miles_by_level, ALL_LEVELS);
   const rankMiles = milesByLevel(route.summary.miles_by_level, RANK_LEVELS);
-  const worst = levelInfo(route.summary.worst);
   const barLabel = levelMiles
     .map(
       ({ level, miles }) =>
@@ -85,19 +81,9 @@ function RouteCard({
         )}
       </span>
 
-      <span className="rc-metrics">
-        <span className="rc-metric">
-          <span>Duration</span>
-          <strong>{formatDuration(route.duration_s)}</strong>
-        </span>
-        <span className="rc-metric">
-          <span>Distance</span>
-          <strong>{formatDistance(route.distance_mi)}</strong>
-        </span>
-        <span className="rc-metric">
-          <span>Arrival</span>
-          <strong>{formatClock(route.arrival)}</strong>
-        </span>
+      <span className="rc-line">
+        {formatDuration(route.duration_s)}, {formatDistance(route.distance_mi)},
+        arrives {formatClock(route.arrival)}
       </span>
 
       <span
@@ -140,26 +126,6 @@ function RouteCard({
           })
         )}
       </span>
-
-      <span className="rc-foot">
-        <span>
-          Avg risk <strong>{formatRisk(route.summary.avg_risk)}</strong> of 4
-        </span>
-        <span className="worst-chip">
-          <span
-            className="level-dot"
-            style={{ backgroundColor: worst.color }}
-            aria-hidden="true"
-          />
-          {worst.name} worst
-        </span>
-      </span>
-
-      {recommended && (
-        <span className="rc-reason" data-testid="recommendation-reason">
-          {reason}
-        </span>
-      )}
     </button>
   );
 }
@@ -199,10 +165,6 @@ export default function RouteCards({
     <section className="section" aria-labelledby="routes-heading">
       <div className="section-head">
         <h2 id="routes-heading">Routes</h2>
-        <span className="section-meta">
-          {plan.routes.length} option{plan.routes.length === 1 ? "" : "s"}, ranked
-          by risk
-        </span>
       </div>
       {warning !== null && (
         <p className="no-safe-route" role="status" data-testid="no-safe-route">
@@ -216,7 +178,6 @@ export default function RouteCards({
             route={route}
             recommended={route.id === plan.recommended_id}
             selected={route.id === selectedId}
-            reason={plan.reason}
             onSelect={onSelect}
           />
         ))}

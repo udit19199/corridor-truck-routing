@@ -32,11 +32,10 @@ function clockText(date: Date): string {
   const weekday = parts.get("weekday") ?? "";
   const hour = parts.get("hour") ?? "00";
   const minute = parts.get("minute") ?? "00";
-  const zone = parts.get("timeZoneName") ?? "";
-  return `${weekday} ${hour}:${minute} ${zone}`.trim();
+  return `${weekday} ${hour}:${minute}`.trim();
 }
 
-/** "Thu 18:00 CST" in the browser's time zone. */
+/** "Thu 18:00" in the browser's time zone; the zone is named once in the fine print. */
 export function formatClock(iso: string): string {
   return clockText(new Date(iso));
 }
@@ -46,7 +45,7 @@ export function timeZoneAbbreviation(): string {
   return formatParts(clockFormatter, new Date()).get("timeZoneName") ?? "";
 }
 
-/** "Thu, Nov 13, 18:00 CST", used where the date matters. */
+/** "Thu, Nov 13, 18:00", used where the date matters. */
 export function formatClockDetailed(iso: string): string {
   const parts = formatParts(detailedFormatter, new Date(iso));
   const weekday = parts.get("weekday") ?? "";
@@ -54,11 +53,10 @@ export function formatClockDetailed(iso: string): string {
   const day = parts.get("day") ?? "";
   const hour = parts.get("hour") ?? "00";
   const minute = parts.get("minute") ?? "00";
-  const zone = parts.get("timeZoneName") ?? "";
-  return `${weekday}, ${month} ${day}, ${hour}:${minute} ${zone}`.trim();
+  return `${weekday}, ${month} ${day}, ${hour}:${minute}`.trim();
 }
 
-/** "+12 h, Thu 18:00 CST", where hour 0 is `heatmap.start`. */
+/** "+12 h, Thu 18:00", where hour 0 is `heatmap.start`. */
 export function formatHourLabel(startIso: string, hour: number): string {
   const date = new Date(new Date(startIso).getTime() + hour * 3_600_000);
   return `+${hour} h, ${clockText(date)}`;

@@ -1,11 +1,9 @@
-import type { Checkpoint, IntervalMi, Route } from "../api";
+import type { Checkpoint, Route } from "../api";
 import { formatClock, formatMiles } from "../lib/format";
 import { levelInfo } from "../lib/levels";
 
 interface CheckpointListProps {
   route: Route;
-  /** The plan's checkpoint spacing, which a short route can differ from. */
-  intervalMi: IntervalMi;
   /** Mile of the checkpoint whose popup is open on this route, if any. */
   focusedMile: number | null;
   onFocus: (checkpoint: Checkpoint) => void;
@@ -13,7 +11,6 @@ interface CheckpointListProps {
 
 export default function CheckpointList({
   route,
-  intervalMi,
   focusedMile,
   onFocus,
 }: CheckpointListProps) {
@@ -22,8 +19,7 @@ export default function CheckpointList({
       <div className="section-head">
         <h2 id="checkpoints-heading">Checkpoints</h2>
         <span className="section-meta">
-          Route {route.id}, {route.checkpoints.length} checkpoint
-          {route.checkpoints.length === 1 ? "" : "s"} every {intervalMi} mi
+          Route {route.id}
         </span>
       </div>
 
@@ -50,23 +46,17 @@ export default function CheckpointList({
                   style={{ backgroundColor: levelMeta.color }}
                   aria-hidden="true"
                 />
-                <span className="cp-main">
-                  <span className="cp-line">
-                    <span className="cp-mile">Mile {formatMiles(checkpoint.mile)}</span>
-                    <span className="cp-time">{formatClock(checkpoint.eta)}</span>
-                  </span>
-                  <span className="cp-detail">
-                    <span
-                      className="cp-level"
-                      style={{ color: levelMeta.color }}
-                    >
-                      {levelMeta.name}
-                    </span>
-                    {checkpoint.level > 0 && (
-                      <span className="cp-cause">{checkpoint.cause}</span>
-                    )}
-                  </span>
+                <span className="cp-mile">
+                  Mile {formatMiles(checkpoint.mile)}
                 </span>
+                {checkpoint.level > 0 ? (
+                  <span className="cp-cause">
+                    {levelMeta.name}: {checkpoint.cause}
+                  </span>
+                ) : (
+                  <span className="sr-only">{levelMeta.name}</span>
+                )}
+                <span className="cp-time">{formatClock(checkpoint.eta)}</span>
               </button>
             );
           })}

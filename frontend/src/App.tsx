@@ -17,6 +17,7 @@ import CheckpointList from "./components/CheckpointList";
 import { demoRequest, type DemoLoad } from "./lib/demo";
 import {
   formatClock,
+  formatDuration,
   formatLoad,
   prefersReducedMotion,
   timeZoneAbbreviation,
@@ -70,13 +71,26 @@ interface ShownPlan {
   version: number;
 }
 
+/** The pick in a driver's words; the ranking numbers stay on the cards and the map. */
+function plainReason(plan: PlanResponse): string {
+  const safest = `Safest for a ${formatLoad(plan.load_lb)} load.`;
+  const picked = plan.routes.find((route) => route.id === plan.recommended_id);
+  if (picked === undefined) {
+    return safest;
+  }
+  const fastest = Math.min(...plan.routes.map((route) => route.duration_s));
+  const extraMinutes = Math.round((picked.duration_s - fastest) / 60);
+  return extraMinutes > 0
+    ? `${safest} ${formatDuration(extraMinutes * 60)} slower than the fastest.`
+    : `${safest} Also the fastest.`;
+}
+
 function PlanSummary({ shown }: { shown: ShownPlan }) {
   const { plan, request } = shown;
   return (
     <p className="plan-summary" data-testid="plan-summary">
       {request.origin.label} to {request.destination.label},{" "}
-      {formatLoad(plan.load_lb)}, checkpoints every {plan.interval_mi} mi,
-      departs {formatClock(plan.departure)}
+      {formatLoad(plan.load_lb)}, leaving {formatClock(plan.departure)}
     </p>
   );
 }
@@ -181,7 +195,6 @@ export default function App() {
             </svg>
             <div>
               <h1>Corridor</h1>
-              <p>Weather-aware truck routing</p>
             </div>
           </div>
         </header>
@@ -220,6 +233,18 @@ export default function App() {
               ) : (
                 <PlanSummary shown={shown} />
               )}
+              <div className="verdict">
+                <p className="verdict-pick">
+                  Take Route {shown.plan.recommended_id}
+                </p>
+                <p
+                  className="verdict-reason"
+                  data-testid="recommendation-reason"
+                  title={shown.plan.reason}
+                >
+                  {plainReason(shown.plan)}
+                </p>
+              </div>
               <RouteCards
                 plan={shown.plan}
                 selectedId={shown.selectedId}
@@ -228,7 +253,6 @@ export default function App() {
               {selectedRoute !== null && (
                 <CheckpointList
                   route={selectedRoute}
-                  intervalMi={shown.plan.interval_mi}
                   focusedMile={
                     shown.focus?.routeId === selectedRoute.id
                       ? shown.focus.checkpoint.mile
@@ -238,9 +262,7 @@ export default function App() {
                 />
               )}
               <p className="fine-print">
-                Times are in your time zone ({timeZoneAbbreviation()}). The
-                corridor heatmap covers {maxHour} h from the first forecast
-                hour; each checkpoint uses the forecast hour nearest its ETA.
+                Times are in your time zone ({timeZoneAbbreviation()}).
               </p>
             </>
           )}

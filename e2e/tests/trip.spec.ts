@@ -31,7 +31,8 @@ test("plans three routes and recommends exactly one, listed first", async ({ pag
   const cards = page.getByTestId("route-card");
   await expect(cards.first()).toHaveAttribute("data-recommended", "true");
   await expect(page.locator('[data-testid="route-card"][data-recommended="false"]')).toHaveCount(2);
-  await expect(page.getByTestId("recommendation-reason")).toContainText("High");
+  await expect(page.getByTestId("recommendation-reason")).toContainText("Safest for a 20,000 lb load.");
+  await expect(page.getByTestId("recommendation-reason")).toHaveAttribute("title", /High/);
   await expect(page.getByTestId("no-safe-route")).toHaveCount(0);
 });
 
@@ -44,7 +45,10 @@ test("a heavier load turns 35-44 mph wind into Severe and changes the recommenda
   await expect
     .poll(() => recommendedId(page), { message: "recommendation changes with load" })
     .not.toBe(lightPick);
-  await expect(page.getByTestId("recommendation-reason")).toContainText("Severe");
+  await expect(page.getByTestId("recommendation-reason")).toHaveText(
+    "Safest for a 45,000 lb load. 11 min slower than the fastest.",
+  );
+  await expect(page.getByTestId("recommendation-reason")).toHaveAttribute("title", /Severe/);
 
   await page.locator(`[data-testid="route-card"][data-route-id="${lightPick}"]`).click();
   await expect(page.locator('[data-testid="checkpoint-row"][data-level="3"]').first()).toBeVisible();
@@ -62,7 +66,7 @@ test("the storm demo plans without the form and its load toggle flips the pick",
   await expect(page.getByTestId("demo-banner")).toContainText("not live weather");
   await expect(page.getByTestId("demo-load-45000")).toHaveAttribute("aria-pressed", "true");
   const heavyPick = await recommendedId(page);
-  await expect(page.getByTestId("recommendation-reason")).toContainText("Severe");
+  await expect(page.getByTestId("recommendation-reason")).toContainText("Safest for a 45,000 lb load.");
 
   await page.getByTestId("demo-load-20000").click();
   await expect(page.getByTestId("demo-load-20000")).toHaveAttribute("aria-pressed", "true");

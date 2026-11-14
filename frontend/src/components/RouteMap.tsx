@@ -56,6 +56,16 @@ interface RouteMapProps {
   apiRef: MutableRefObject<MapApi | null>;
 }
 
+const POPUP_HEIGHT_PX = 440;
+const DOCK_HEIGHT_PX = 190;
+
+/** Top padding that puts a focused checkpoint below its popup and above the dock. */
+function popupClearance(map: MapLibreMap): number {
+  const height = map.getContainer().clientHeight;
+  const pointY = Math.min(height - DOCK_HEIGHT_PX, POPUP_HEIGHT_PX);
+  return Math.max(0, 2 * pointY - height);
+}
+
 function RouteMap({
   plan,
   selectedId,
@@ -116,7 +126,11 @@ function RouteMap({
       map.flyTo({
         center: [checkpoint.lon, checkpoint.lat],
         zoom: Math.max(map.getZoom(), 7),
-        padding: narrow ? { top: 140, right: 0, bottom: 0, left: 0 } : undefined,
+        // On a phone the popup opens above the point and the dock covers the bottom,
+        // so the point sits low enough for the whole popup and clear of the dock.
+        padding: narrow
+          ? { top: popupClearance(map), right: 0, bottom: 0, left: 0 }
+          : undefined,
         duration: prefersReducedMotion() ? 0 : 600,
       });
     },

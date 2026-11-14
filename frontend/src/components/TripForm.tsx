@@ -73,10 +73,6 @@ export default function TripForm({
   );
   // With a trip on screen the pressed spacing is that trip's, never the pending choice.
   const pressedIntervalMi = planIntervalMi ?? intervalMi;
-  const intervalNote =
-    planIntervalMi === null
-      ? "Choose the spacing between checkpoints for this trip."
-      : "Picking another spacing replans this trip with the values above.";
   const showMessage = (field: FieldKey) => submitAttempted || touched[field];
 
   function markTouched(field: FieldKey) {
@@ -156,7 +152,7 @@ export default function TripForm({
     <form className="trip-form" onSubmit={handleSubmit} noValidate>
       <PlacePicker
         inputId="origin-input"
-        label="Origin"
+        label="From"
         placeholder="City or town"
         emptyMessage="Choose an origin."
         value={origin}
@@ -167,7 +163,7 @@ export default function TripForm({
       />
       <PlacePicker
         inputId="destination-input"
-        label="Destination"
+        label="To"
         placeholder="City or town"
         emptyMessage="Choose a destination."
         value={destination}
@@ -179,8 +175,7 @@ export default function TripForm({
 
       <div className="field">
         <label htmlFor="departure-input">
-          Departure
-          <span className="field-note">local time</span>
+          Leaving
         </label>
         <input
           id="departure-input"
@@ -245,14 +240,13 @@ export default function TripForm({
 
         <div className="field">
           <span className="field-label" id="interval-label">
-            Checkpoints
+            Checkpoint every
             <span className="field-note">mi</span>
           </span>
           <div
             className="segmented"
             role="group"
             aria-labelledby="interval-label"
-            aria-describedby="interval-description"
           >
             {INTERVAL_CHOICES.map((miles) => (
               <button
@@ -268,10 +262,6 @@ export default function TripForm({
             ))}
           </div>
         </div>
-
-        <p className="form-note" id="interval-description">
-          {intervalNote}
-        </p>
       </div>
 
       <button

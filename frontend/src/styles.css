@@ -568,31 +568,32 @@ input[type="number"] {
   font-weight: 550;
 }
 
-.rc-metrics {
-  display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr);
-  gap: 18px;
+.rc-line {
+  font-size: 13.5px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
 }
 
-.rc-metric {
+.verdict {
   display: flex;
   flex-direction: column;
-  min-width: 0;
+  gap: 6px;
 }
 
-.rc-metric > span {
-  font-size: 11px;
-  color: var(--ink-3);
+.verdict-pick {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--ink);
 }
 
-.rc-metric strong {
-  overflow: hidden;
-  font-size: 13px;
-  font-weight: 550;
-  letter-spacing: -0.01em;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+.verdict-reason {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--ink);
+  text-wrap: pretty;
 }
 
 .risk-bar {
@@ -626,45 +627,11 @@ input[type="number"] {
   white-space: nowrap;
 }
 
-.rc-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 11.5px;
-  color: var(--ink-3);
-}
-
-.rc-foot strong {
-  font-weight: 550;
-  color: var(--ink-2);
-  font-variant-numeric: tabular-nums;
-}
-
-.worst-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  white-space: nowrap;
-  font-size: 11.5px;
-  color: var(--ink-2);
-}
-
 .level-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
   flex: none;
-}
-
-.rc-reason {
-  display: block;
-  padding-top: 11px;
-  border-top: 1px solid var(--line);
-  color: var(--ink);
-  font-size: 12.5px;
-  line-height: 1.5;
-  text-wrap: pretty;
 }
 
 /* ---------- Checkpoint list ---------- */
@@ -677,14 +644,14 @@ input[type="number"] {
 
 .cp-row {
   display: grid;
-  grid-template-columns: 8px minmax(0, 1fr);
-  align-items: start;
+  grid-template-columns: 8px auto minmax(0, 1fr) auto;
+  align-items: baseline;
   gap: 10px;
-  padding: 7px 10px;
+  padding: 8px 10px;
   border: 0;
   border-radius: 8px;
   background: transparent;
-  font-size: 12.5px;
+  font-size: 13.5px;
   color: var(--ink-2);
   text-align: left;
   transition: background-color 120ms var(--ease-out);
@@ -712,22 +679,8 @@ input[type="number"] {
 .cp-dot {
   width: 8px;
   height: 8px;
-  margin-top: 5px;
+  align-self: center;
   border-radius: 50%;
-}
-
-.cp-main {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-}
-
-.cp-line {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
 }
 
 .cp-mile {
@@ -740,25 +693,18 @@ input[type="number"] {
 }
 
 .cp-time {
+  grid-column: 4;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   color: var(--ink-3);
 }
 
-.cp-detail {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1px 8px;
-  font-size: 11.5px;
-  line-height: 1.4;
-}
-
-.cp-level {
-  white-space: nowrap;
-}
-
 .cp-cause {
-  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  color: var(--ink-2);
 }
 
 /* ---------- Loading and empty ---------- */
@@ -1237,8 +1183,8 @@ input[type="number"] {
 
   .map-shell {
     flex: none;
-    height: 62vh;
-    min-height: 440px;
+    height: 88dvh;
+    min-height: 560px;
   }
 
   .map-dock {
@@ -1260,10 +1206,6 @@ input[type="number"] {
 
   .map-dock {
     padding: 10px 13px 8px;
-  }
-
-  .rc-metric strong {
-    font-size: 12px;
   }
 }
 

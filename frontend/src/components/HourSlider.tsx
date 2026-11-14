@@ -24,7 +24,7 @@ export default function HourSlider({ start, maxHour, onHour }: HourSliderProps) 
         <span className="hour-label" data-testid="hour-label">
           {label}
         </span>
-        <span className="hour-context">Corridor forecast</span>
+        <span className="hour-context">Forecast</span>
       </div>
       <input
         className="hour-range"
