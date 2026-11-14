@@ -1,6 +1,6 @@
 # Corridor
 
-Weather-aware truck routing: three TomTom truck routes, an hourly forecast at every checkpoint for the hour the truck reaches it, a risk-ranked recommendation, and a 0 to 48 hour heatmap along the corridor. Django, React and MapLibre.
+Weather-aware truck routing: three routes scored with hourly forecasts at each checkpoint, and one recommended route.
 
 Live: https://corridor-truck-routing.onrender.com
 
@@ -35,10 +35,10 @@ For live routes, put `TOMTOM_API_KEY=...` in `backend/.env` and drop the two fix
 ## Tests and deploys
 
 ```sh
-cd e2e
+cd frontend
 npm ci
 npx playwright install chromium
-npm test
+npm run test:e2e
 ```
 
 The Playwright suite drives the real UI against recorded routes. CI runs lint, types, the production build, those tests and a Docker image smoke test. Render deploys `main` only after CI passes.
@@ -51,7 +51,7 @@ The Playwright suite drives the real UI against recorded routes. CI runs lint, t
 - **Small state, small surface.** One container serves the API and the built front end, with the key only on the server.
 - **End-to-end tests.** They fail the way a user would notice: a wrong band edge, ranking or mile count.
 
-`DESIGN.md` has the rules, pipeline, API contract and trade-offs.
+`AGENTS.md` has the rules, pipeline, API contract and trade-offs.
 
 ## Stack
 

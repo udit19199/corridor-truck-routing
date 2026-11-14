@@ -58,7 +58,7 @@ jobs:
       - name: Django system checks
         run: uv run python manage.py check
       - name: Fixture pipeline check
-        run: uv run python scripts/check_fixture.py
+        run: uv run python check_fixture.py
 
   frontend:
     name: Frontend (tsc, build)
