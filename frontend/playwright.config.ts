@@ -18,7 +18,7 @@ export default defineConfig({
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
     command:
-      "npm --prefix ../frontend run build && cd ../backend && uv run python manage.py runserver 127.0.0.1:8765 --noreload",
+      "npm run build && cd ../backend && uv run python manage.py runserver 127.0.0.1:8765 --noreload",
     url: "http://127.0.0.1:8765/api/health",
     timeout: 180_000,
     reuseExistingServer: false,
