@@ -53,4 +53,4 @@ The Playwright suite drives the real UI against recorded routes. CI runs lint, t
 
 ## Stack
 
-Django 5.2, React 18, TypeScript, Vite, MapLibre GL, TomTom Routing and Search, Open-Meteo, Render.
+Django 5.2, Pydantic, React 18, TypeScript, Vite, MapLibre GL, TomTom Routing and Search, Open-Meteo, Render.

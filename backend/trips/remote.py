@@ -22,20 +22,6 @@ class NoRouteError(Exception):
         super().__init__("No truck route was found between these places.")
 
 
-def as_dict(value: Json) -> dict[str, Json]:
-    return value if isinstance(value, dict) else {}
-
-
-def as_list(value: Json) -> list[Json]:
-    return value if isinstance(value, list) else []
-
-
-def as_float(value: Json) -> float | None:
-    if isinstance(value, (int, float)) and not isinstance(value, bool):
-        return float(value)
-    return None
-
-
 def get_json(
     url: str,
     params: dict[str, str | int],

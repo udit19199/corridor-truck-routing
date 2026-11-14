@@ -4,24 +4,29 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 
 from django.core.cache import cache
+from pydantic import BaseModel, ValidationError
 
 from trips.domain import Cell, Weather
-from trips.remote import (
-    Json,
-    ProviderError,
-    as_dict,
-    as_float,
-    as_list,
-    chunks,
-    get_json,
-    on_hour,
-)
+from trips.remote import ProviderError, chunks, get_json, on_hour
 
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
 SERVICE = "The weather service"
 OPENMETEO_FIELDS = ("wind_speed_10m", "wind_gusts_10m", "rain", "showers", "snowfall")
 MAX_GAP_FILL_HOURS = 3
 WEATHER_CACHE_SECONDS = 30 * 60
+
+
+class _Hourly(BaseModel):
+    time: list[datetime]
+    wind_speed_10m: list[float | None]
+    wind_gusts_10m: list[float | None]
+    rain: list[float | None]
+    showers: list[float | None]
+    snowfall: list[float | None]
+
+
+class _Forecast(BaseModel):
+    hourly: _Hourly
 
 
 def hourly(cells: list[Cell], start: datetime, end: datetime) -> dict[Cell, list[Weather]]:
@@ -68,23 +73,19 @@ def _fetch(cells: list[Cell], start: datetime, hours: int) -> dict[Cell, list[We
     if not isinstance(items, list) or len(items) != len(cells):
         raise ProviderError(f"{SERVICE} returned an unexpected response.")
 
-    result = {}
-    for cell, item in zip(cells, items, strict=True):
-        hourly_block = as_dict(as_dict(item).get("hourly"))
-        times = as_list(hourly_block.get("time"))
-        fields = {name: as_list(hourly_block.get(name)) for name in OPENMETEO_FIELDS}
-        if (
-            not times
-            or not isinstance(times[0], str)
-            or any(len(values) != len(times) for values in fields.values())
-        ):
-            raise ProviderError(f"{SERVICE} returned an unexpected response.")
+    try:
+        forecasts = [_Forecast.model_validate(item).hourly for item in items]
+    except ValidationError:
+        raise ProviderError(f"{SERVICE} returned an unexpected response.") from None
 
-        try:
-            first = datetime.fromisoformat(times[0]).replace(tzinfo=UTC)
-        except ValueError:
-            raise ProviderError(f"{SERVICE} returned an unexpected response.") from None
-        if first != start or len(times) != hours:
+    result = {}
+    for cell, block in zip(cells, forecasts, strict=True):
+        fields = {name: getattr(block, name) for name in OPENMETEO_FIELDS}
+        if (
+            len(block.time) != hours
+            or block.time[0].replace(tzinfo=UTC) != start
+            or any(len(values) != hours for values in fields.values())
+        ):
             raise ProviderError(f"{SERVICE} returned an unexpected response.")
 
         wind, gust, rain, showers, snow = (_fill_gaps(fields[name]) for name in OPENMETEO_FIELDS)
@@ -110,8 +111,7 @@ def _fetch(cells: list[Cell], start: datetime, hours: int) -> dict[Cell, list[We
     return result
 
 
-def _fill_gaps(readings: list[Json]) -> list[float] | None:
-    values = [as_float(reading) for reading in readings]
+def _fill_gaps(values: list[float | None]) -> list[float] | None:
     known = [(index, value) for index, value in enumerate(values) if value is not None]
     if not known:
         return None

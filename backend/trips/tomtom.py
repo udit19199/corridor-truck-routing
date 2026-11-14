@@ -6,17 +6,12 @@ from collections import Counter
 from datetime import UTC, datetime, timedelta
 from urllib.parse import quote
 
+from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic.alias_generators import to_camel
+
 from trips.domain import Place, RouteOption, TrackPoint
 from trips.geometry import haversine
-from trips.remote import (
-    Json,
-    NoRouteError,
-    ProviderError,
-    as_dict,
-    as_float,
-    as_list,
-    get_json,
-)
+from trips.remote import Json, NoRouteError, ProviderError, get_json
 
 TOMTOM_SEARCH_URL = "https://api.tomtom.com/search/2/search/{query}.json"
 TOMTOM_ROUTE_URL = "https://api.tomtom.com/routing/1/calculateRoute/{origin}:{destination}/json"
@@ -24,6 +19,85 @@ SEARCH_SERVICE = "The TomTom search service"
 ROUTING_SERVICE = "The TomTom routing service"
 TRUCK_TARE_LB = 35_000
 NO_ROUTE_CODES = frozenset({"MAP_MATCHING_FAILURE", "NO_ROUTE_FOUND", "CANNOT_RESTORE_BASEROUTE"})
+
+
+class _Model(BaseModel):
+    """TomTom's JSON uses camelCase; fields here are snake_case."""
+
+    model_config = ConfigDict(alias_generator=to_camel, frozen=True)
+
+
+class _Position(_Model):
+    lat: float
+    lon: float
+
+
+class _Address(_Model):
+    freeform_address: str | None = None
+
+
+class _Poi(_Model):
+    name: str | None = None
+
+
+class _SearchResult(_Model):
+    position: _Position | None = None
+    address: _Address = _Address()
+    poi: _Poi = _Poi()
+
+
+class _Search(_Model):
+    results: list[_SearchResult] = []
+
+
+class _Point(_Model):
+    latitude: float
+    longitude: float
+
+
+class _Leg(_Model):
+    points: list[_Point] = []
+
+
+class _Summary(_Model):
+    travel_time_in_seconds: float
+    length_in_meters: float = 0.0
+
+
+class _Instruction(_Model):
+    route_offset_in_meters: float | None = None
+    travel_time_in_seconds: float | None = None
+    road_numbers: list[str] = []
+
+
+class _Guidance(_Model):
+    instructions: list[_Instruction] = []
+
+
+class _Route(_Model):
+    summary: _Summary
+    legs: list[_Leg] = []
+    guidance: _Guidance = _Guidance()
+
+
+class _Routing(_Model):
+    routes: list[_Route] = []
+
+
+class _ErrorDetail(_Model):
+    code: str = ""
+    message: str = ""
+
+
+class _ErrorBody(_Model):
+    detailed_error: _ErrorDetail = _ErrorDetail()
+
+
+def _parse[M: BaseModel](model: type[M], data: Json, service: str) -> M:
+    try:
+        return model.model_validate(data)
+    except ValidationError:
+        raise ProviderError(f"{service} returned an unexpected response.") from None
 
 
 def _key() -> str:
@@ -46,29 +120,19 @@ def geocode(query: str) -> list[Place]:
         SEARCH_SERVICE,
     )
     places = []
-    if not isinstance(data, dict):
-        raise ProviderError(f"{SEARCH_SERVICE} returned an unexpected response.")
-    results = data.get("results") or []
-    if not isinstance(results, list):
-        raise ProviderError(f"{SEARCH_SERVICE} returned an unexpected response.")
-    for result in results[:5]:
-        if not isinstance(result, dict):
-            continue
-        position = as_dict(result.get("position"))
-        address = as_dict(result.get("address"))
-        poi = as_dict(result.get("poi"))
-        label = address.get("freeformAddress") or poi.get("name")
-        lon, lat = as_float(position.get("lon")), as_float(position.get("lat"))
-        if lon is not None and lat is not None and label:
-            places.append(Place(label=str(label), lon=lon, lat=lat))
+    for result in _parse(_Search, data, SEARCH_SERVICE).results[:5]:
+        label = result.address.freeform_address or result.poi.name
+        if result.position and label:
+            places.append(Place(label=label, lon=result.position.lon, lat=result.position.lat))
     return places
 
 
 def _says_no_route(body: Json) -> bool:
-    detail = as_dict(as_dict(body).get("detailedError"))
-    code = str(detail.get("code") or "").upper()
-    message = str(detail.get("message") or "").upper()
-    return code in NO_ROUTE_CODES or "NO_ROUTE_FOUND" in message
+    try:
+        detail = _ErrorBody.model_validate(body).detailed_error
+    except ValidationError:
+        return False
+    return detail.code.upper() in NO_ROUTE_CODES or "NO_ROUTE_FOUND" in detail.message.upper()
 
 
 def routes(
@@ -93,20 +157,12 @@ def routes(
         ROUTING_SERVICE,
         no_route_400=_says_no_route,
     )
+    alternatives = _parse(_Routing, data, ROUTING_SERVICE).routes
     options = []
-    if not isinstance(data, dict):
-        raise ProviderError(f"{ROUTING_SERVICE} returned an unexpected response.")
-    alternatives = data.get("routes") or []
-    if not isinstance(alternatives, list):
-        raise ProviderError(f"{ROUTING_SERVICE} returned an unexpected response.")
     taken_names: set[str] = set()
     for route in alternatives[:3]:
-        if not isinstance(route, dict):
-            continue
         track = _track(route)
-        summary = as_dict(route.get("summary"))
-        duration_s = as_float(summary.get("travelTimeInSeconds"))
-        if len(track) < 2 or duration_s is None or duration_s <= 0:
+        if len(track) < 2 or route.summary.travel_time_in_seconds <= 0:
             continue
         name = _route_name(_roads_by_distance(route), taken_names)
         if name in taken_names:
@@ -114,9 +170,7 @@ def routes(
         taken_names.add(name)
         options.append(
             RouteOption(
-                name=name,
-                duration_s=int(duration_s),
-                track=track,
+                name=name, duration_s=int(route.summary.travel_time_in_seconds), track=track
             )
         )
     if not options:
@@ -126,25 +180,17 @@ def routes(
     return options
 
 
-def _roads_by_distance(route: dict[str, Json]) -> list[str]:
-    guidance = as_dict(route.get("guidance"))
-    instructions = [
-        item for item in as_list(guidance.get("instructions")) if isinstance(item, dict)
-    ]
-    offsets: list[float | None] = [
-        as_float(instruction.get("routeOffsetInMeters")) for instruction in instructions
-    ]
-    offsets.append(None)
+def _roads_by_distance(route: _Route) -> list[str]:
+    instructions = route.guidance.instructions
+    offsets = [instruction.route_offset_in_meters for instruction in instructions] + [None]
     metres: dict[str, float] = {}
     for instruction, start, following in zip(instructions, offsets, offsets[1:], strict=False):
         stretch_m = following - start if start is not None and following is not None else 0.0
-        for number in as_list(instruction.get("roadNumbers")):
-            metres[str(number)] = metres.get(str(number), 0.0) + stretch_m
+        for number in instruction.road_numbers:
+            metres[number] = metres.get(number, 0.0) + stretch_m
     if not any(metres.values()):
-        counts: Counter[str] = Counter(
-            str(number)
-            for instruction in instructions
-            for number in as_list(instruction.get("roadNumbers"))
+        counts = Counter(
+            number for instruction in instructions for number in instruction.road_numbers
         )
         return [number for number, _count in counts.most_common()]
     return sorted(metres, key=lambda number: metres[number], reverse=True)
@@ -161,18 +207,11 @@ def _route_name(roads: list[str], taken_names: set[str]) -> str:
     return name
 
 
-def _track(route: dict[str, Json]) -> list[TrackPoint]:
+def _track(route: _Route) -> list[TrackPoint]:
     points: list[tuple[float, float]] = []
-    for leg in as_list(route.get("legs")):
-        if not isinstance(leg, dict):
-            continue
-        for point in as_list(leg.get("points")):
-            if not isinstance(point, dict):
-                continue
-            lat, lon = as_float(point.get("latitude")), as_float(point.get("longitude"))
-            if lat is None or lon is None:
-                continue
-            pair = (lon, lat)
+    for leg in route.legs:
+        for point in leg.points:
+            pair = (point.longitude, point.latitude)
             if not points or points[-1] != pair:
                 points.append(pair)
     if len(points) < 2:
@@ -182,30 +221,26 @@ def _track(route: dict[str, Json]) -> list[TrackPoint]:
     for start, end in zip(points, points[1:], strict=False):
         distance_m.append(distance_m[-1] + haversine(start[0], start[1], end[0], end[1]) * 1609.344)
     length = distance_m[-1]
-    summary = as_dict(route.get("summary"))
-    total_time = as_float(summary.get("travelTimeInSeconds")) or 0.0
-    reported_m = as_float(summary.get("lengthInMeters")) or 0.0
+    reported_m = route.summary.length_in_meters
     scale = length / reported_m if reported_m > 0 else 1.0
-    offsets, times = _instruction_marks(as_dict(route.get("guidance")), length, total_time, scale)
-
-    track = []
-    for (lon, lat), distance in zip(points, distance_m, strict=False):
-        track.append((lon, lat, round(_time_at(offsets, times, distance))))
-    return track
+    offsets, times = _instruction_marks(
+        route.guidance, length, route.summary.travel_time_in_seconds, scale
+    )
+    return [
+        (lon, lat, round(_time_at(offsets, times, distance)))
+        for (lon, lat), distance in zip(points, distance_m, strict=False)
+    ]
 
 
 def _instruction_marks(
-    guidance: dict[str, Json], length_m: float, total_time: float, scale: float
+    guidance: _Guidance, length_m: float, total_time: float, scale: float
 ) -> tuple[list[float], list[float]]:
-    pairs = []
-    for instruction in as_list(guidance.get("instructions")):
-        if not isinstance(instruction, dict):
-            continue
-        offset = as_float(instruction.get("routeOffsetInMeters"))
-        seconds = as_float(instruction.get("travelTimeInSeconds"))
-        if offset is not None and seconds is not None:
-            pairs.append((offset * scale, seconds))
-    pairs.sort()
+    pairs = sorted(
+        (instruction.route_offset_in_meters * scale, instruction.travel_time_in_seconds)
+        for instruction in guidance.instructions
+        if instruction.route_offset_in_meters is not None
+        and instruction.travel_time_in_seconds is not None
+    )
 
     offsets, times = [0.0], [0.0]
     for offset, seconds in pairs:
