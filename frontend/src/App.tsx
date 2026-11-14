@@ -309,6 +309,10 @@ export default function App() {
             <div className="dock-foot">
               <RiskLegend />
             </div>
+            <p className="dock-note">
+              Squares show the forecast at this hour. Dots show it when the truck
+              gets there. Open a dot to jump to its hour.
+            </p>
           </div>
         )}
       </main>
