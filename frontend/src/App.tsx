@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  checkpointHour,
   maxHeatHour,
   type Checkpoint,
   type PlanRequest,
@@ -69,6 +70,8 @@ interface ShownPlan {
   focus: PopupState | null;
   /** Bumped for every plan, so the slider resets. */
   version: number;
+  /** Set when a checkpoint opens, so the map shows the hour it was scored at. */
+  hourJump: { hour: number } | null;
 }
 
 /** The pick in a driver's words; the ranking numbers stay on the cards and the map. */
@@ -102,6 +105,7 @@ export default function App() {
       selectedId: plan.recommended_id,
       focus: null,
       version: (previous?.version ?? 0) + 1,
+      hourJump: null,
     }));
   }, []);
 
@@ -129,7 +133,14 @@ export default function App() {
     setShown((previous) =>
       previous === null || (previous.focus === null && focus === null)
         ? previous
-        : { ...previous, focus },
+        : {
+            ...previous,
+            focus,
+            hourJump:
+              focus === null
+                ? previous.hourJump
+                : { hour: checkpointHour(previous.plan, focus.checkpoint) },
+          },
     );
   }, []);
 
@@ -292,6 +303,7 @@ export default function App() {
               key={shown.version}
               start={shown.plan.heatmap.start}
               maxHour={maxHour}
+              jump={shown.hourJump}
               onHour={handleHour}
             />
             <div className="dock-foot">

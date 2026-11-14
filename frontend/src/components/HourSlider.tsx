@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { formatHourLabel } from "../lib/format";
 
 interface HourSliderProps {
@@ -6,12 +6,21 @@ interface HourSliderProps {
   start: string;
   /** Highest forecast hour, the number of levels per cell minus 1. */
   maxHour: number;
+  /** A new object moves the slider to its hour, e.g. when a checkpoint opens. */
+  jump: { hour: number } | null;
   onHour: (hour: number) => void;
 }
 
 // App remounts this with a new key per plan, so each plan starts at hour 0.
-export default function HourSlider({ start, maxHour, onHour }: HourSliderProps) {
+export default function HourSlider({ start, maxHour, jump, onHour }: HourSliderProps) {
   const [hour, setHour] = useState(0);
+
+  useEffect(() => {
+    if (jump !== null) {
+      setHour(jump.hour);
+      onHour(jump.hour);
+    }
+  }, [jump, onHour]);
 
   const label = formatHourLabel(start, hour);
   const span = Math.max(maxHour, 1);

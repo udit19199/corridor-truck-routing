@@ -87,6 +87,12 @@ export function maxHeatHour(plan: PlanResponse): number {
   return Math.max(0, (levels?.length ?? 1) - 1);
 }
 
+/** The slider hour closest to when the truck reaches this checkpoint. */
+export function checkpointHour(plan: PlanResponse, checkpoint: Checkpoint): number {
+  const hours = (Date.parse(checkpoint.eta) - Date.parse(plan.heatmap.start)) / 3_600_000;
+  return Math.min(maxHeatHour(plan), Math.max(0, Math.round(hours)));
+}
+
 const UNREADABLE = "The planning server sent an unreadable response.";
 
 function isRecord(value: unknown): value is Record<string, unknown> {

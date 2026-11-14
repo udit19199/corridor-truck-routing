@@ -1,6 +1,7 @@
 import {
   LngLatBounds,
   type ExpressionSpecification,
+  type FilterSpecification,
   type GeoJSONSource,
   type Map as MapLibreMap,
 } from "maplibre-gl";
@@ -134,6 +135,22 @@ export function installLayers(map: MapLibreMap): void {
       "circle-stroke-width": 2,
     },
   });
+  const truckLabel = (id: string, filter: FilterSpecification) =>
+    map.addLayer({
+      id,
+      type: "symbol",
+      source: TRUCKS_SOURCE,
+      filter,
+      layout: {
+        "text-field": ["get", "routeId"],
+        "text-font": ["Noto Sans Regular"],
+        "text-size": 10,
+        "text-allow-overlap": true,
+        "text-ignore-placement": true,
+      },
+      paint: { "text-color": "#ffffff" },
+    });
+  truckLabel("truck-labels-other", ["!=", ["get", "routeId"], ""]);
   map.addLayer({
     id: "trucks-selected",
     type: "circle",
@@ -146,19 +163,7 @@ export function installLayers(map: MapLibreMap): void {
       "circle-stroke-width": 2.5,
     },
   });
-  map.addLayer({
-    id: "truck-labels",
-    type: "symbol",
-    source: TRUCKS_SOURCE,
-    layout: {
-      "text-field": ["get", "routeId"],
-      "text-font": ["Noto Sans Regular"],
-      "text-size": 10,
-      "text-allow-overlap": true,
-      "text-ignore-placement": true,
-    },
-    paint: { "text-color": "#ffffff" },
-  });
+  truckLabel("truck-labels-selected", ["==", ["get", "routeId"], ""]);
 }
 
 export function applyPlanData(map: MapLibreMap, layers: PlanLayers): void {
@@ -174,6 +179,8 @@ export function applySelection(map: MapLibreMap, routeId: string | null): void {
   map.setFilter("cp-other", ["!=", ["get", "routeId"], id]);
   map.setFilter("trucks-selected", ["==", ["get", "routeId"], id]);
   map.setFilter("trucks-other", ["!=", ["get", "routeId"], id]);
+  map.setFilter("truck-labels-selected", ["==", ["get", "routeId"], id]);
+  map.setFilter("truck-labels-other", ["!=", ["get", "routeId"], id]);
 }
 
 export function applyHour(
