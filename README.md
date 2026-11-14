@@ -4,7 +4,7 @@ Weather-aware truck routing: three routes scored with hourly forecasts at each c
 
 Live: https://corridor-truck-routing.onrender.com
 
-![Storm demo at 45,000 lb: Route B is recommended because the 35 to 44 mph wind on Route A is Severe for a heavy load](docs/plan.png)
+![Storm demo at 45,000 lb: Route B is recommended because the 35 to 44 mph wind on Route A is Severe for a heavy load](plan.png)
 
 ## Try it
 

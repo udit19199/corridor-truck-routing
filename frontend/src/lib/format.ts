@@ -85,10 +85,6 @@ export function formatMiles(miles: number): string {
   return fractionalMiles.format(miles);
 }
 
-export function formatRisk(value: number): string {
-  return value.toFixed(2);
-}
-
 function pad(value: number): string {
   return String(value).padStart(2, "0");
 }
