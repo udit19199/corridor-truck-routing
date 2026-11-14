@@ -19,7 +19,7 @@ export interface Weather {
   snow_in_hr: number;
 }
 
-export interface CheckpointLevels {
+interface CheckpointLevels {
   wind: Level;
   rain: Level;
   snow: Level;
@@ -58,7 +58,7 @@ export interface Route {
   summary: RouteSummary;
 }
 
-export interface HeatmapCell {
+interface HeatmapCell {
   lon: number;
   lat: number;
   /** One level per forecast hour, from hour 0 up. */
@@ -98,6 +98,41 @@ export interface PlanRequest {
   demo?: boolean;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isPlace(value: unknown): value is Place {
+  return (
+    isRecord(value) &&
+    typeof value.label === "string" &&
+    typeof value.lon === "number" &&
+    typeof value.lat === "number"
+  );
+}
+
+/** The fields the UI reads; anything missing would blank the page during render. */
+function isPlanResponse(value: unknown): value is PlanResponse {
+  if (!isRecord(value) || !Array.isArray(value.routes) || value.routes.length === 0) {
+    return false;
+  }
+  const routesReadable = value.routes.every(
+    (route) =>
+      isRecord(route) &&
+      Array.isArray(route.track) &&
+      Array.isArray(route.checkpoints) &&
+      isRecord(route.summary) &&
+      Array.isArray(route.summary.miles_by_level),
+  );
+  return (
+    routesReadable &&
+    typeof value.recommended_id === "string" &&
+    typeof value.reason === "string" &&
+    isRecord(value.heatmap) &&
+    Array.isArray(value.heatmap.cells)
+  );
+}
+
 function isErrorPayload(payload: unknown): payload is { error: string } {
   return (
     typeof payload === "object" &&
@@ -125,10 +160,13 @@ export async function geocode(query: string, signal?: AbortSignal): Promise<Plac
   if (!response.ok) {
     throw await errorFrom(response);
   }
-  let places: Place[];
+  let places: unknown;
   try {
     places = await response.json();
   } catch {
+    throw new Error("The planning server sent an unreadable response.");
+  }
+  if (!Array.isArray(places) || !places.every(isPlace)) {
     throw new Error("The planning server sent an unreadable response.");
   }
   return places;
@@ -144,10 +182,13 @@ export async function planTrip(body: PlanRequest, signal?: AbortSignal): Promise
   if (!response.ok) {
     throw await errorFrom(response);
   }
-  let plan: PlanResponse;
+  let plan: unknown;
   try {
     plan = await response.json();
   } catch {
+    throw new Error("The planning server sent an unreadable response.");
+  }
+  if (!isPlanResponse(plan)) {
     throw new Error("The planning server sent an unreadable response.");
   }
   return plan;

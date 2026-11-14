@@ -304,7 +304,7 @@ interface PlanRequest {
 }
 
 interface PlanResponse {
-  departure: string;                          // exactly as requested
+  departure: string;                          // UTC, normalised from the request
   load_lb: number;
   interval_mi: 10 | 25 | 50;
   recommended_id: string;
@@ -395,7 +395,7 @@ Live cell counts at 0.25° / 0.5° / 1°: Dallas to Chicago 366 / 136 / 64, so i
 |---|---|---|
 | TomTom routing | `travelMode=truck`, `vehicleCommercial=true`, `vehicleWeight` = (cargo + 35,000 lb) in kg, `maxAlternatives=2`, `alternativeType=anyRoute`, `departAt` = max(departure, now + 1 min), `traffic=false`, `instructionsType=coded`. Live traffic made TomTom return only 1 route for some departures (Dallas to Chicago at 09:30 UTC: 1 with traffic, 3 without); historical speeds for the departure hour still shape the ETAs | a 400 whose error code means no route (`NO_ROUTE_FOUND`, `MAP_MATCHING_FAILURE`, `CANNOT_RESTORE_BASEROUTE`) is `NoRouteError`, 422; any other 400 is our own bad request, 502 |
 | TomTom search | `countrySet=US`, `typeahead=true`, `limit=5`, `idxSet=Geo,PAD` | cached 1 day per query |
-| Open-Meteo | `hourly=wind_speed_10m,wind_gusts_10m,rain,showers,snowfall`, mph and inch, GMT, `start_hour`/`end_hour`, 100 locations per request, up to 4 requests in parallel | a null takes the nearest valid hour within 3 hours, otherwise the plan fails; a series that does not cover the requested hours is an error, never padded; concurrent plans share in-flight fetches per cell |
+| Open-Meteo | `hourly=wind_speed_10m,wind_gusts_10m,rain,showers,snowfall`, mph and inch, GMT, `start_hour`/`end_hour`, 100 locations per request, up to 4 requests in parallel | a null takes the nearest valid hour within 3 hours, otherwise the plan fails; a series that does not cover the requested hours is an error, never padded; the per-cell cache makes repeat and nearby plans cheap |
 
 Route names are the two roads with the most distance on the route, made distinct across the three routes.
 
@@ -405,7 +405,7 @@ Route names are the two roads with the most distance on the route, made distinct
 
 - Dark theme only, OpenFreeMap's dark style with buildings, land use, minor roads and rail removed at load, and labels lifted for contrast.
 - The map code is a separate chunk loaded with `React.lazy`, so the form paints before MapLibre (about 300 KB gzip plus a 148 KB gzip worker) arrives. Main bundle: about 52 KB gzip. Hashed assets are served as immutable.
-- Layers, bottom to top, all under the basemap labels: heat cells (fill), route lines (others grey, selected white and wider), checkpoint circles coloured by level, trucks.
+- Layers, bottom to top: heat cells (fill) and route lines (others grey, selected white and wider) sit under the basemap labels; checkpoint circles coloured by level and the trucks sit above them so they stay readable.
 - **Slider path.** GeoJSON for a plan is built once. Each heat cell has a numeric feature id, and `fill-color` reads `["feature-state", "level"]` (transparent when unset). A slider move, coalesced to one per animation frame, sets one feature state per cell and replaces the three-point truck source. It never changes the style. A data-driven paint expression (`match` on `r{h}`) was the first version; MapLibre reloads the source on every change of such a property (1 reload and 6 `sourcedata` events per move). `global-state` was tried and rejected because combined with per-cell data it still reloads. Measured with a 4x CPU throttle on 279 cells (fixture at 0.25°, before the cap went to 250): 0 reloads per move, frame p50 30.3 ms and p95 32.6 ms (was 30.6 and 34.3), feature-state writes 0.1 ms p95.
 - Trucks show each route's position at `heatmap.start + h hours`: at the origin before departure, hidden after arrival.
 - App keeps the current slider hour and any checkpoint focus made before the map finished loading in two refs the map reads when it loads. A new plan resets the hour to 0 and drops a pending focus. The open checkpoint lives in App's shown plan, so the popup and the marked list row always agree; a new plan, a route click or closing the popup clears it.
@@ -445,6 +445,7 @@ Open-Meteo is the binding limit, about 3x tighter than TomTom. Our own throttle 
 
 - Gunicorn runs one process with 8 threads. One process means one in-memory cache, so a repeat plan always finds its weather (two processes would miss about half the time).
 - Weather: key `weather:{lon:.2f}:{lat:.2f}:{UTC hour}`, TTL 30 minutes. A plan reads its cells and hours from the cache and fetches only the missing cells, in batches of 100 with up to 4 in parallel. Django's local-memory cache is thread-safe.
+- Two cold plans that overlap in time each fetch their own cells. In-flight deduplication was removed to keep one fetch path; the per-cell cache covers repeat and nearby plans, which is the common case. The throttle bounds how many cold plans one client can start.
 - Geocode: key by lower-cased query, TTL 1 day.
 - Throttle counters: `throttle:{scope}:{client}`, 60-second window.
 - Nothing is invalidated by hand. Forecasts change hourly at most, so 30 minutes bounds staleness.

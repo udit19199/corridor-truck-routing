@@ -153,6 +153,8 @@ function RouteMap({
           .find((route) => route.id === routeId)
           ?.checkpoints[index];
         if (checkpoint !== undefined) {
+          // The list must mark the same route the popup belongs to.
+          onSelectRouteRef.current(routeId);
           onPopupRef.current({ routeId, checkpoint });
           return;
         }

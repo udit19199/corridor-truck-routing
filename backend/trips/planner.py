@@ -161,7 +161,9 @@ def forecast_index(when: datetime, start_hour: datetime) -> int:
 def _checkpoint_miles(total_mi: float, interval_mi: int) -> list[float]:
     miles = [0.0]
     mile = float(interval_mi)
-    while mile < total_mi - MIN_CHECKPOINT_GAP_MI:
+    # A checkpoint exactly MIN_CHECKPOINT_GAP_MI from the destination is kept, so the
+    # destination never absorbs a whole interval of weather.
+    while mile <= total_mi - MIN_CHECKPOINT_GAP_MI:
         miles.append(mile)
         mile += interval_mi
     miles.append(total_mi)
@@ -172,13 +174,12 @@ def _weather_cells(
     tracks: list[list[TrackPoint]], checkpoint_points: list[TrackPoint]
 ) -> tuple[float, list[Cell]]:
     """The cells to fetch weather for, and the finest grid that fits MAX_WEATHER_CELLS."""
-    cell_deg, cells = CELL_SIZES[-1], []
     for candidate in CELL_SIZES:
-        cell_deg, cells = candidate, _cells_on_grid(tracks, checkpoint_points, candidate)
+        cells = _cells_on_grid(tracks, checkpoint_points, candidate)
         if len(cells) <= MAX_WEATHER_CELLS:
-            break
+            return candidate, cells
     # If even the coarsest grid is too large, keep it; the provider reports its rate limit.
-    return cell_deg, cells
+    return CELL_SIZES[-1], cells
 
 
 def _cells_on_grid(

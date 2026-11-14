@@ -149,6 +149,12 @@ jobs:
           curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 2 \
             http://localhost:8000/api/health
           curl --fail --silent --show-error http://localhost:8000/ | grep --quiet '<div id="root">'
+          # The page can load while WhiteNoise still serves no assets; check one hashed bundle.
+          asset=$(curl --fail --silent --show-error http://localhost:8000/ \
+            | grep --only-matching --max-count=1 '/assets/[^"]*\.js')
+          test -n "$asset"
+          curl --fail --silent --show-error --output /dev/null \
+            --write-out '%{content_type}' "http://localhost:8000$asset" | grep --quiet 'javascript'
           test "$(docker exec app id -u)" = 10001
       - name: Container logs
         if: always()

@@ -45,7 +45,7 @@ It runs on Render's free plan. If nobody has used it for 15 minutes, the first l
 
 ## Key decisions and trade-offs
 
-- **One request returns everything, including all 49 heatmap hours.** The slider then never waits on the network. A move sets one feature state per heat cell instead of rebuilding the map source, so it holds 60 fps (measured: p95 frame time 16.7 ms while dragging on the live app).
+- **One request returns everything, including all 49 heatmap hours.** The slider then never waits on the network. A move sets one feature state per heat cell instead of rebuilding the map source, so it holds 60 fps on the live app. With the CPU throttled 4x it still moved at a p95 frame time of 32.6 ms, with no source reload.
 - **TomTom for routing, Open-Meteo for weather.** TomTom has a real truck profile, so the load changes the route and the times. Open-Meteo takes 100 locations per request, so a whole corridor costs a few calls. Both have free tiers. The server caches weather per cell and hour for 30 minutes, so repeat plans are cheap.
 - **No database.** Every plan is computed from live data and nothing needs to persist. One Gunicorn worker owns an in-memory cache; Redis is the first step past one instance (see `DESIGN.md` section 14).
 - **The rules live in one place.** Thresholds and load rules exist only in `rules.py`. The API sends levels as numbers, and the front end maps numbers to names and colours in one file.
@@ -109,7 +109,7 @@ They cover the recommendation, the load rule flipping it at exactly 40,001 lb, t
 
 ## CI and deploys
 
-Every push and pull request runs [`ci.yml`](.github/workflows/ci.yml):
+Every push to `main` and every pull request runs [`ci.yml`](.github/workflows/ci.yml):
 
 | Job | What it checks |
 |---|---|

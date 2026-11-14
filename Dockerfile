@@ -14,7 +14,7 @@ ENV UV_PROJECT_ENVIRONMENT=/venv \
     UV_LINK_MODE=copy
 WORKDIR /app/backend
 COPY backend/pyproject.toml backend/uv.lock ./
-RUN uv sync --frozen --no-dev --no-cache
+RUN uv sync --frozen --no-dev --no-cache && rm -f /usr/local/bin/uv
 COPY backend/ ./
 COPY --from=web /app/frontend/dist /app/frontend/dist
 RUN useradd --no-create-home --uid 10001 app

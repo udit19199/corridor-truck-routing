@@ -119,22 +119,22 @@ def summarize(checkpoints: list[Checkpoint], distance_mi: float) -> RouteSummary
 
 
 # Level names for the reason, worst first. These three decide the ranking before time does.
-RISK_LEVELS = (
-    (Level.NO_TRAVEL, "No Travel"),
-    (Level.SEVERE, "Severe"),
-    (Level.HIGH, "High"),
-)
+NO_TRAVEL = (Level.NO_TRAVEL, "No Travel")
+SEVERE = (Level.SEVERE, "Severe")
+HIGH = (Level.HIGH, "High")
+RISK_LEVELS = (NO_TRAVEL, SEVERE, HIGH)
+# The two levels the "even the winner" warning names.
+WARNING_LEVELS = (NO_TRAVEL, SEVERE)
 AVERAGE_RISK_KEY = len(RISK_LEVELS)
 TIME_KEY = AVERAGE_RISK_KEY + 1
 TIE_KEY = AVERAGE_RISK_KEY + 2
 
 
-def _rank_key(route: Route) -> tuple[float, float, float, float, int]:
+def _rank_key(route: Route) -> tuple[float, ...]:
+    """The brief's order: No Travel, Severe and High miles, then average risk, then time."""
     miles = route.summary.miles_by_level
     return (
-        miles[Level.NO_TRAVEL],
-        miles[Level.SEVERE],
-        miles[Level.HIGH],
+        *(miles[level] for level, _label in RISK_LEVELS),
         route.summary.avg_risk,
         route.duration_s,
     )
@@ -186,24 +186,28 @@ def _why_better(winner: Route, other: Route) -> tuple[int, str]:
     return TIE_KEY, f"ties Route {other.id} on every key"
 
 
-def _warning(winner: Route) -> str:
+def _warning(winner: Route, *, single: bool = False) -> str:
     """Warns when the winner itself still carries No Travel or Severe miles."""
     miles = winner.summary.miles_by_level
     parts = [
         f"{_format_miles(miles[level])} {label} miles"
-        for level, label in RISK_LEVELS[:2]
+        for level, label in WARNING_LEVELS
         if miles[level]
     ]
     if not parts:
         return ""
+    if single:
+        return f" It has {' and '.join(parts)}."
     return f" Even Route {winner.id} has {' and '.join(parts)}."
 
 
 def rank(routes: list[Route]) -> tuple[list[Route], str]:
     # sorted() is stable, so routes that tie on every key keep the provider's order.
     ranked = sorted(routes, key=_rank_key)
+    if not ranked:
+        return ranked, "No routes were found."
     if len(ranked) < 2:
-        return ranked, "Only one route was found."
+        return ranked, f"Only one route was found.{_warning(ranked[0], single=True)}"
     winner = ranked[0]
     comparisons = sorted(
         (_why_better(winner, other) for other in ranked[1:]),

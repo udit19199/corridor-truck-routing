@@ -1,6 +1,6 @@
 import type { Level } from "./api";
 
-export interface LevelInfo {
+interface LevelInfo {
   readonly name: string;
   readonly color: string;
 }
@@ -21,3 +21,7 @@ export const LEVELS = [
 export function levelInfo(level: Level): LevelInfo {
   return LEVELS[level];
 }
+
+// The two levels the ranking and the "no safe route" warning name explicitly.
+export const SEVERE_LEVEL = 3 satisfies Level;
+export const NO_TRAVEL_LEVEL = 4 satisfies Level;

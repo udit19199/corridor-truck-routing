@@ -27,7 +27,7 @@ export type FormIssues = Partial<Record<FieldKey, string>>;
 /** Straight-line miles, the same distance the server checks before it plans. */
 function milesBetween(a: Place, b: Place): number {
   const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
-  const earthRadiusMi = 3958.8;
+  const earthRadiusMi = 3958.7613;
   const deltaLat = toRadians(b.lat - a.lat);
   const deltaLon = toRadians(b.lon - a.lon);
   const h =

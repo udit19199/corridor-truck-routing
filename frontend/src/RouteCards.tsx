@@ -6,11 +6,15 @@ import {
   formatMiles,
   formatRisk,
 } from "./format";
-import { levelInfo } from "./levels";
+import {
+  levelInfo,
+  NO_TRAVEL_LEVEL,
+  SEVERE_LEVEL,
+} from "./levels";
 
 const ALL_LEVELS = [0, 1, 2, 3, 4] as const;
 /** The miles the ranking compares first: No Travel, then Severe, then High. */
-const RANK_LEVELS = [4, 3, 2] as const;
+const RANK_LEVELS = [NO_TRAVEL_LEVEL, SEVERE_LEVEL, 2] as const;
 
 /** The levels with miles above zero, in the order given. */
 function milesByLevel(
@@ -176,10 +180,10 @@ function noSafeRouteWarning(plan: PlanResponse): string | null {
   if (best === undefined || plan.routes.length < 2) {
     return null;
   }
-  if (best.summary.miles_by_level[4] > 0) {
+  if (best.summary.miles_by_level[NO_TRAVEL_LEVEL] > 0) {
     return "Every route crosses No Travel weather. Consider a later departure.";
   }
-  if (best.summary.miles_by_level[3] > 0) {
+  if (best.summary.miles_by_level[SEVERE_LEVEL] > 0) {
     return "Every route crosses Severe weather. Consider a later departure.";
   }
   return null;

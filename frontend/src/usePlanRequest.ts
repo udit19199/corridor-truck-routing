@@ -3,7 +3,7 @@ import { planTrip, type PlanRequest, type PlanResponse } from "./api";
 
 const PLAN_TIMEOUT_MS = 30_000;
 
-export type RequestState =
+type RequestState =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "error"; message: string };

@@ -98,6 +98,9 @@ export default function TripForm({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (loading) {
+      return;
+    }
     setSubmitAttempted(true);
     const submitted = checkForm(
       new Date(),
@@ -275,7 +278,7 @@ export default function TripForm({
         type="submit"
         data-testid="plan-submit"
         className="plan-button"
-        disabled={loading}
+        aria-disabled={loading}
       >
         {loading ? (
           <>

@@ -370,11 +370,12 @@ input[type="number"] {
   transition: background-color 150ms var(--ease-out), transform 120ms var(--ease-out);
 }
 
-.plan-button:hover:not(:disabled) {
+.plan-button:hover:not(:disabled):not([aria-disabled="true"]) {
   background: var(--accent-hover);
 }
 
-.plan-button:disabled {
+.plan-button:disabled,
+.plan-button[aria-disabled="true"] {
   background: var(--disabled-bg);
   color: var(--disabled-ink);
   cursor: not-allowed;
@@ -1181,12 +1182,6 @@ input[type="number"] {
   white-space: nowrap;
 }
 
-.popup-sub {
-  font-size: 11px;
-  font-weight: 400;
-  color: var(--ink-3);
-}
-
 .popup-cause {
   margin: 12px 0 0;
   padding-top: 10px;
@@ -1283,7 +1278,7 @@ input[type="number"] {
   }
 }
 
-/* Map and app shell (batch C) */
+/* Plan summary and errors */
 
 .plan-summary {
   margin: 0;
@@ -1378,7 +1373,7 @@ input[type="number"] {
 
 /* ---------- Press, entrance and touch ---------- */
 
-.plan-button:active:not(:disabled),
+.plan-button:active:not(:disabled):not([aria-disabled="true"]),
 .secondary-button:active,
 .segmented button:active {
   transform: scale(0.97);

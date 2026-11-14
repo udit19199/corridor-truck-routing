@@ -97,8 +97,8 @@ export function DemoBanner({
     <div className="demo-banner" data-testid="demo-banner">
       <p>
         <strong>Storm demo.</strong> Recorded Dallas to Chicago routes under a
-        scripted storm, not live weather. Above 40,000 lb, 35 to 44 mph wind
-        counts as Severe.
+        scripted storm, not live weather. Switch the load and the same wind
+        changes level.
       </p>
       <div
         className="segmented demo-loads"

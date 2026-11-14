@@ -156,9 +156,12 @@ def _parse_departure(value: object) -> datetime:
 
     now = datetime.now(UTC)
     if departure < now - timedelta(hours=DEPARTURE_PAST_HOURS):
-        raise ValueError("Departure cannot be more than 1 hour in the past.")
+        hours = DEPARTURE_PAST_HOURS
+        raise ValueError(
+            f"Departure cannot be more than {hours} hour{'s' if hours != 1 else ''} in the past."
+        )
     if departure > now + timedelta(days=DEPARTURE_AHEAD_DAYS):
-        raise ValueError("Departure must be within the next 12 days.")
+        raise ValueError(f"Departure must be within the next {DEPARTURE_AHEAD_DAYS} days.")
     return departure
 
 

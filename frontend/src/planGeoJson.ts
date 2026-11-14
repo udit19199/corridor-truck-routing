@@ -12,17 +12,17 @@ import type {
 } from "geojson";
 import type { Level, PlanResponse, TrackPoint } from "./api";
 
-export interface RouteProperties {
+interface RouteProperties {
   routeId: string;
 }
 
-export interface CheckpointProperties {
+interface CheckpointProperties {
   routeId: string;
   checkpointIndex: number;
   level: Level;
 }
 
-export interface TruckProperties {
+interface TruckProperties {
   routeId: string;
 }
 
