@@ -18,9 +18,6 @@ from trips.remote import NoRouteError, ProviderError
 
 logger = logging.getLogger(__name__)
 
-DEPARTURE_PAST_HOURS = 1
-DEPARTURE_AHEAD_DAYS = 12
-GEOCODE_QUERY_MAX = 100
 GEOCODE_CACHE_SECONDS = 24 * 60 * 60
 RATE_WINDOW_SECONDS = 60
 PLAN_REQUESTS_PER_WINDOW = 6
@@ -35,12 +32,12 @@ def health(_request: HttpRequest) -> JsonResponse:
 @require_GET
 def geocode(request: HttpRequest) -> JsonResponse:
     query = request.GET.get("q", "").strip()
-    if not 2 <= len(query) <= GEOCODE_QUERY_MAX:
+    if not 2 <= len(query) <= 100:
         return JsonResponse([], safe=False)
     if _over_limit(request, "geocode", GEOCODE_REQUESTS_PER_WINDOW):
         return _too_many_requests()
 
-    cache_key = _geocode_cache_key(query)
+    cache_key = f"geocode:{query.lower()}"
     places = cache.get(cache_key)
     if places is None:
         try:
@@ -155,13 +152,10 @@ def _parse_departure(value: object) -> datetime:
     departure = departure.astimezone(UTC)
 
     now = datetime.now(UTC)
-    if departure < now - timedelta(hours=DEPARTURE_PAST_HOURS):
-        hours = DEPARTURE_PAST_HOURS
-        raise ValueError(
-            f"Departure cannot be more than {hours} hour{'s' if hours != 1 else ''} in the past."
-        )
-    if departure > now + timedelta(days=DEPARTURE_AHEAD_DAYS):
-        raise ValueError(f"Departure must be within the next {DEPARTURE_AHEAD_DAYS} days.")
+    if departure < now - timedelta(hours=1):
+        raise ValueError("Departure cannot be more than 1 hour in the past.")
+    if departure > now + timedelta(days=12):
+        raise ValueError("Departure must be within the next 12 days.")
     return departure
 
 
@@ -176,14 +170,12 @@ def _is_number(value: object) -> TypeIs[int | float]:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
-def _geocode_cache_key(query: str) -> str:
-    return f"geocode:{query.lower()}"
-
-
 def _over_limit(request: HttpRequest, scope: str, limit: int) -> bool:
     if not settings.THROTTLE_ENABLED:
         return False
-    key = f"throttle:{scope}:{_client_address(request)}"
+    forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
+    client = forwarded.split(",")[0].strip() if forwarded else request.META.get("REMOTE_ADDR", "")
+    key = f"throttle:{scope}:{client}"
     if cache.add(key, 1, RATE_WINDOW_SECONDS):
         return False
     try:
@@ -191,11 +183,6 @@ def _over_limit(request: HttpRequest, scope: str, limit: int) -> bool:
     except ValueError:
         cache.set(key, 1, RATE_WINDOW_SECONDS)
         return False
-
-
-def _client_address(request: HttpRequest) -> str:
-    forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
-    return forwarded.split(",")[0].strip() if forwarded else request.META.get("REMOTE_ADDR", "")
 
 
 def _too_many_requests() -> JsonResponse:

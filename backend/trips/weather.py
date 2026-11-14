@@ -18,6 +18,7 @@ from trips.remote import (
 )
 
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
+SERVICE = "The weather service"
 OPENMETEO_FIELDS = ("wind_speed_10m", "wind_gusts_10m", "rain", "showers", "snowfall")
 MAX_GAP_FILL_HOURS = 3
 WEATHER_CACHE_SECONDS = 30 * 60
@@ -61,17 +62,15 @@ def _fetch(cells: list[Cell], start: datetime, hours: int) -> dict[Cell, list[We
             "start_hour": start.strftime("%Y-%m-%dT%H:%M"),
             "end_hour": end.strftime("%Y-%m-%dT%H:%M"),
         },
-        "The weather service",
+        SERVICE,
     )
     items = [data] if isinstance(data, dict) else data
     if not isinstance(items, list) or len(items) != len(cells):
-        raise ProviderError("The weather service returned an unexpected response.")
+        raise ProviderError(f"{SERVICE} returned an unexpected response.")
 
     result = {}
     for cell, item in zip(cells, items, strict=True):
-        if not isinstance(item, dict):
-            raise ProviderError("The weather service returned an unexpected response.")
-        hourly_block = as_dict(item.get("hourly"))
+        hourly_block = as_dict(as_dict(item).get("hourly"))
         times = as_list(hourly_block.get("time"))
         fields = {name: as_list(hourly_block.get(name)) for name in OPENMETEO_FIELDS}
         if (
@@ -79,23 +78,19 @@ def _fetch(cells: list[Cell], start: datetime, hours: int) -> dict[Cell, list[We
             or not isinstance(times[0], str)
             or any(len(values) != len(times) for values in fields.values())
         ):
-            raise ProviderError("The weather service returned an unexpected response.")
+            raise ProviderError(f"{SERVICE} returned an unexpected response.")
 
         try:
             first = datetime.fromisoformat(times[0]).replace(tzinfo=UTC)
         except ValueError:
-            raise ProviderError("The weather service returned an unexpected response.") from None
+            raise ProviderError(f"{SERVICE} returned an unexpected response.") from None
         if first != start or len(times) != hours:
-            raise ProviderError("The weather service returned an unexpected response.")
+            raise ProviderError(f"{SERVICE} returned an unexpected response.")
 
-        series = {name: _fill_gaps(fields[name]) for name in OPENMETEO_FIELDS}
-        wind = series["wind_speed_10m"]
-        rain = series["rain"]
-        showers = series["showers"]
-        snow = series["snowfall"]
-        gust = series["wind_gusts_10m"] or wind
+        wind, gust, rain, showers, snow = (_fill_gaps(fields[name]) for name in OPENMETEO_FIELDS)
+        gust = gust or wind
         if wind is None or rain is None or showers is None or snow is None or gust is None:
-            raise ProviderError("The weather service returned incomplete data.")
+            raise ProviderError(f"{SERVICE} returned incomplete data.")
 
         forecast = []
         for hour in range(hours):
@@ -116,22 +111,18 @@ def _fetch(cells: list[Cell], start: datetime, hours: int) -> dict[Cell, list[We
 
 
 def _fill_gaps(readings: list[Json]) -> list[float] | None:
-    known = [index for index, reading in enumerate(readings) if as_float(reading) is not None]
+    values = [as_float(reading) for reading in readings]
+    known = [(index, value) for index, value in enumerate(values) if value is not None]
     if not known:
         return None
-    filled = []
-    for index, reading in enumerate(readings):
-        value = as_float(reading)
-        if value is not None:
-            filled.append(value)
-            continue
-        nearest = min(known, key=lambda other: abs(other - index))
-        if abs(nearest - index) > MAX_GAP_FILL_HOURS:
-            raise ProviderError("The weather service returned incomplete data.")
-        nearest_value = as_float(readings[nearest])
-        if nearest_value is None:
-            raise ProviderError("The weather service returned incomplete data.")
-        filled.append(nearest_value)
+    filled: list[float] = []
+    for index, value in enumerate(values):
+        if value is None:
+            near = min(known, key=lambda pair: abs(pair[0] - index))
+            if abs(near[0] - index) > MAX_GAP_FILL_HOURS:
+                raise ProviderError(f"{SERVICE} returned incomplete data.")
+            value = near[1]
+        filled.append(value)
     return filled
 
 

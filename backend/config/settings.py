@@ -5,27 +5,6 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 REPO_DIR = BASE_DIR.parent
 
-
-def _env_value(raw: str) -> str:
-    value = raw.strip()
-    if value[:1] in {"'", '"'}:
-        return value[1:].split(value[0], 1)[0]
-    return value.split(" #", 1)[0].strip()
-
-
-def _read_env_file(path: Path) -> None:
-    for line in path.read_text().splitlines():
-        name, sep, value = line.strip().partition("=")
-        name = name.removeprefix("export ").strip()
-        if not sep or not name or name.startswith("#"):
-            continue
-        os.environ.setdefault(name, _env_value(value))
-
-
-_env_file = BASE_DIR / ".env"
-if _env_file.exists():
-    _read_env_file(_env_file)
-
 DEBUG = os.environ.get("DEBUG", "").lower() in {"1", "true", "yes"}
 
 SECRET_KEY = os.environ.get("SECRET_KEY") or (
@@ -49,11 +28,7 @@ MIDDLEWARE = [
 ]
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-SECURE_CONTENT_TYPE_NOSNIFF = True
-SECURE_REFERRER_POLICY = "same-origin"
 SECURE_HSTS_SECONDS = 0 if DEBUG else 31_536_000
-SECURE_HSTS_PRELOAD = False
-SECURE_SSL_REDIRECT = False
 
 THROTTLE_ENABLED = os.environ.get("THROTTLE_ENABLED", "true").lower() in {"1", "true", "yes"}
 
@@ -61,8 +36,6 @@ ROOT_URLCONF = "config.urls"
 WSGI_APPLICATION = "config.wsgi.application"
 
 DATABASES = {}
-TEMPLATES = []
-USE_TZ = True
 TIME_ZONE = "UTC"
 
 CACHES = {
@@ -78,9 +51,7 @@ PROVIDER_TIMEOUT_S = 15
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "formatters": {
-        "console": {"format": "%(asctime)s %(levelname)s %(name)s %(message)s"},
-    },
+    "formatters": {"console": {"format": "%(levelname)s %(name)s %(message)s"}},
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
@@ -91,7 +62,6 @@ LOGGING = {
     },
     "root": {"handlers": ["console"], "level": "INFO"},
     "loggers": {
-        "django.request": {"handlers": ["console"], "level": "ERROR", "propagate": False},
         "django.security.DisallowedHost": {"handlers": ["discard"], "propagate": False},
     },
 }

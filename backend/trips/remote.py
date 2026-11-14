@@ -11,7 +11,6 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 Json = object
-NO_ROUTE_MESSAGE = "No truck route was found between these places."
 
 
 class ProviderError(Exception):
@@ -19,8 +18,8 @@ class ProviderError(Exception):
 
 
 class NoRouteError(Exception):
-    def __init__(self, message: str = NO_ROUTE_MESSAGE) -> None:
-        super().__init__(message)
+    def __init__(self) -> None:
+        super().__init__("No truck route was found between these places.")
 
 
 def as_dict(value: Json) -> dict[str, Json]:
@@ -43,7 +42,7 @@ def get_json(
     service: str,
     no_route_400: Callable[[Json], bool] | None = None,
 ) -> Json:
-    timeout = getattr(settings, "PROVIDER_TIMEOUT_S", 15)
+    timeout = settings.PROVIDER_TIMEOUT_S
     started = monotonic()
     try:
         response = requests.get(url, params=params, timeout=timeout)

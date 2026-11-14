@@ -20,6 +20,8 @@ from trips.remote import (
 
 TOMTOM_SEARCH_URL = "https://api.tomtom.com/search/2/search/{query}.json"
 TOMTOM_ROUTE_URL = "https://api.tomtom.com/routing/1/calculateRoute/{origin}:{destination}/json"
+SEARCH_SERVICE = "The TomTom search service"
+ROUTING_SERVICE = "The TomTom routing service"
 TRUCK_TARE_LB = 35_000
 NO_ROUTE_CODES = frozenset({"MAP_MATCHING_FAILURE", "NO_ROUTE_FOUND", "CANNOT_RESTORE_BASEROUTE"})
 
@@ -41,14 +43,14 @@ def geocode(query: str) -> list[Place]:
             "limit": 5,
             "idxSet": "Geo,PAD",
         },
-        "The TomTom search service",
+        SEARCH_SERVICE,
     )
     places = []
     if not isinstance(data, dict):
-        raise ProviderError("The TomTom search service returned an unexpected response.")
+        raise ProviderError(f"{SEARCH_SERVICE} returned an unexpected response.")
     results = data.get("results") or []
     if not isinstance(results, list):
-        raise ProviderError("The TomTom search service returned an unexpected response.")
+        raise ProviderError(f"{SEARCH_SERVICE} returned an unexpected response.")
     for result in results[:5]:
         if not isinstance(result, dict):
             continue
@@ -63,9 +65,7 @@ def geocode(query: str) -> list[Place]:
 
 
 def _says_no_route(body: Json) -> bool:
-    detail = body.get("detailedError") if isinstance(body, dict) else None
-    if not isinstance(detail, dict):
-        return False
+    detail = as_dict(as_dict(body).get("detailedError"))
     code = str(detail.get("code") or "").upper()
     message = str(detail.get("message") or "").upper()
     return code in NO_ROUTE_CODES or "NO_ROUTE_FOUND" in message
@@ -90,15 +90,15 @@ def routes(
             "traffic": "false",
             "instructionsType": "coded",
         },
-        "The TomTom routing service",
+        ROUTING_SERVICE,
         no_route_400=_says_no_route,
     )
     options = []
     if not isinstance(data, dict):
-        raise ProviderError("The TomTom routing service returned an unexpected response.")
+        raise ProviderError(f"{ROUTING_SERVICE} returned an unexpected response.")
     alternatives = data.get("routes") or []
     if not isinstance(alternatives, list):
-        raise ProviderError("The TomTom routing service returned an unexpected response.")
+        raise ProviderError(f"{ROUTING_SERVICE} returned an unexpected response.")
     taken_names: set[str] = set()
     for route in alternatives[:3]:
         if not isinstance(route, dict):
@@ -121,7 +121,7 @@ def routes(
         )
     if not options:
         if alternatives:
-            raise ProviderError("The TomTom routing service returned an unexpected response.")
+            raise ProviderError(f"{ROUTING_SERVICE} returned an unexpected response.")
         raise NoRouteError()
     return options
 
@@ -131,14 +131,12 @@ def _roads_by_distance(route: dict[str, Json]) -> list[str]:
     instructions = [
         item for item in as_list(guidance.get("instructions")) if isinstance(item, dict)
     ]
+    offsets: list[float | None] = [
+        as_float(instruction.get("routeOffsetInMeters")) for instruction in instructions
+    ]
+    offsets.append(None)
     metres: dict[str, float] = {}
-    for index, instruction in enumerate(instructions):
-        start = as_float(instruction.get("routeOffsetInMeters"))
-        following = (
-            as_float(instructions[index + 1].get("routeOffsetInMeters"))
-            if index + 1 < len(instructions)
-            else None
-        )
+    for instruction, start, following in zip(instructions, offsets, offsets[1:], strict=False):
         stretch_m = following - start if start is not None and following is not None else 0.0
         for number in as_list(instruction.get("roadNumbers")):
             metres[str(number)] = metres.get(str(number), 0.0) + stretch_m
@@ -222,11 +220,11 @@ def _instruction_marks(
 
 
 def _time_at(offsets: list[float], times: list[float], distance: float) -> float:
-    if distance <= 0 or len(offsets) < 2:
+    if distance <= 0:
         return times[0]
     if distance >= offsets[-1]:
         return times[-1]
-    index = max(0, bisect_right(offsets, distance) - 1)
+    index = bisect_right(offsets, distance) - 1
     span = offsets[index + 1] - offsets[index]
-    fraction = (distance - offsets[index]) / span if span else 0.0
+    fraction = (distance - offsets[index]) / span
     return times[index] + (times[index + 1] - times[index]) * fraction

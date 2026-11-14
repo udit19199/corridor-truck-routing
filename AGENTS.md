@@ -146,7 +146,7 @@ The root `Makefile` is the one entry point; CI runs the same steps.
 
 | Change | Run before calling it done |
 |---|---|
-| `backend/trips/rules.py`, `planner.py`, `geometry.py`, `providers.py` | `make check`, `make test` |
+| `backend/trips/rules.py`, `wording.py`, `planner.py`, `geometry.py`, `providers.py` | `make check`, `make test` |
 | `backend/trips/tomtom.py`, `weather.py`, `remote.py`, `recorded.py` | `make check`, one live request against the real API, `make test` |
 | `frontend/src/**` | `make check`, `make test`, and look at the page in a browser |
 | API contract | Update section 4 and `frontend/src/api.ts` in the same change, then `make test` |

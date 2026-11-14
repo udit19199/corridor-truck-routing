@@ -12,9 +12,10 @@ setup:
 dev-backend:
 	cd backend && DEBUG=true ROUTING_PROVIDER=fixture WEATHER_PROVIDER=fixture uv run python manage.py runserver 8000
 
-# Reads TOMTOM_API_KEY from backend/.env. Variables here would win over that file, so set none.
+# Runs with live providers, loading backend/.env (copy backend/.env.example first).
+# Variables already set in the shell win over that file, so set none.
 dev-live:
-	cd backend && uv run python manage.py runserver 8000
+	cd backend && uv run --env-file .env python manage.py runserver 8000
 
 dev-frontend:
 	cd frontend && npm run dev

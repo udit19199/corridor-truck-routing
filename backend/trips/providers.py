@@ -13,10 +13,7 @@ from trips.domain import Cell, Place, RouteOption, Weather
 class Providers:
     geocode: Callable[[str], list[Place]]
     routes: Callable[[Place, Place, datetime, int], list[RouteOption]]
-    hourly: Callable[
-        [list[Cell], datetime, datetime],
-        dict[Cell, list[Weather]],
-    ]
+    hourly: Callable[[list[Cell], datetime, datetime], dict[Cell, list[Weather]]]
 
 
 def demo_providers() -> Providers:

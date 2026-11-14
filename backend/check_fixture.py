@@ -1,5 +1,4 @@
 # ruff: noqa: E402
-import argparse
 import os
 import sys
 import time
@@ -152,25 +151,18 @@ def _check_checkpoint_levels(plan: Plan) -> list[str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--no-assert", action="store_true", help="print only, do not assert")
-    args = parser.parse_args()
-
     plan_light, elapsed_light = plan_for(20_000)
     plan_heavy, elapsed_heavy = plan_for(45_000)
     show(plan_light, elapsed_light)
     show(plan_heavy, elapsed_heavy)
 
     failures = check(plan_light, plan_heavy)
-    if not args.no_assert and failures:
-        for failure in failures:
-            print(f"  FAIL {failure}")
-        return 1
-    if failures:
-        print("  assertions skipped (--no-assert)")
-    else:
+    if not failures:
         print("  all checks passed")
-    return 0
+        return 0
+    for failure in failures:
+        print(f"  FAIL {failure}")
+    return 1
 
 
 if __name__ == "__main__":
