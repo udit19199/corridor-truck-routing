@@ -53,22 +53,22 @@ export function pruneBasemap(map: MapLibreMap): void {
  * its own background, which is too dim to scan at a glance. Lift them once.
  */
 const BASEMAP_TEXT: ReadonlyArray<readonly [string, string]> = [
-  ["place_city_large", "#c6d0dc"],
-  ["place_city", "#c6d0dc"],
-  ["place_town", "#a8b4c2"],
-  ["place_village", "#8e9aa8"],
-  ["place_other", "#8e9aa8"],
-  ["place_state", "#7f8c9c"],
-  ["place_country_major", "#93a0b0"],
-  ["place_country_minor", "#93a0b0"],
-  ["place_country_other", "#93a0b0"],
-  ["highway_name_motorway", "#93a3b6"],
+  ["place_city_large", "#c9c9ce"],
+  ["place_city", "#c9c9ce"],
+  ["place_town", "#adadb3"],
+  ["place_village", "#93939a"],
+  ["place_other", "#93939a"],
+  ["place_state", "#85858c"],
+  ["place_country_major", "#98989f"],
+  ["place_country_minor", "#98989f"],
+  ["place_country_other", "#98989f"],
+  ["highway_name_motorway", "#98989f"],
 ];
 
 const BASEMAP_LINES: ReadonlyArray<readonly [string, string]> = [
-  ["boundary_state", "#37424e"],
-  ["boundary_country_z0-4", "#47535f"],
-  ["boundary_country_z5-", "#47535f"],
+  ["boundary_state", "#3a3a40"],
+  ["boundary_country_z0-4", "#4b4b52"],
+  ["boundary_country_z5-", "#4b4b52"],
 ];
 
 export function tuneBasemap(map: MapLibreMap): void {

@@ -1,35 +1,37 @@
 :root {
   color-scheme: dark;
-  --bg: #080b10;
-  --panel: #0f141b;
-  --surface: #151c25;
-  --surface-hover: #1a2431;
-  --surface-sunken: #0b1017;
-  --line: #1f2833;
-  --line-strong: #5b6d84;
-  --ink: #e9eef5;
-  --ink-2: #aeb9c7;
-  --ink-3: #8592a3;
-  --accent: #2f6fe0;
-  --accent-hover: #245cc0;
-  --accent-bright: #6aa8ff;
-  --accent-soft: #16233a;
-  --accent-strong: #a9c8ff;
-  --on-accent: #ffffff;
-  --selection: #1d3150;
-  --scrollbar: #2a3542;
-  --focus-halo: rgba(106, 168, 255, 0.2);
-  --danger-bg: #2a1518;
+  /* Neutral ink on near-black. Colour on this screen always means weather risk. */
+  --bg: #0a0a0b;
+  --panel: #0e0e10;
+  --surface: #17171a;
+  --surface-hover: #1e1e22;
+  --surface-sunken: #0a0a0b;
+  --line: #232327;
+  --line-strong: #5c5c63;
+  --ink: #ededef;
+  --ink-2: #a9a9b0;
+  --ink-3: #87878e;
+  --accent: #ededef;
+  --accent-hover: #ffffff;
+  --accent-bright: #ededef;
+  --accent-soft: #1e1e22;
+  --accent-strong: #ededef;
+  --on-accent: #0a0a0b;
+  --selection: #3a3a40;
+  --scrollbar: #2c2c31;
+  --focus-halo: rgba(237, 237, 239, 0.16);
+  --danger-bg: #2a1416;
   --danger-ink: #ffe3e1;
   --danger-ink-2: #e7b9b6;
   --danger-icon: #ff9b93;
-  --disabled-bg: #1b2430;
-  --disabled-ink: #6f7c8c;
-  --skeleton: #141b25;
-  --skeleton-shine: #1d2733;
-  --map-bg: #0c1117;
-  --shadow-dock: 0 2px 4px rgba(0, 0, 0, 0.35), 0 20px 44px -18px rgba(0, 0, 0, 0.75);
-  --shadow-pop: 0 18px 40px -16px rgba(0, 0, 0, 0.8);
+  --disabled-bg: #1e1e22;
+  --disabled-ink: #77777e;
+  --skeleton: #141416;
+  --skeleton-shine: #1e1e22;
+  --map-bg: #0a0a0b;
+  --shadow-dock: 0 1px 2px rgba(0, 0, 0, 0.4), 0 16px 40px -16px rgba(0, 0, 0, 0.8);
+  --shadow-pop: 0 1px 2px rgba(0, 0, 0, 0.4), 0 14px 34px -14px rgba(0, 0, 0, 0.85);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --font: "Inter", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
 }
@@ -51,8 +53,10 @@ body {
   line-height: 1.45;
   color: var(--ink);
   background: var(--bg);
+  caret-color: var(--ink);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
 }
 
 ::selection {
@@ -68,10 +72,11 @@ input {
 
 button {
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--ink);
   outline-offset: 2px;
 }
 
@@ -107,7 +112,7 @@ button {
 
 .panel-head {
   flex: none;
-  padding: 15px 17px 14px;
+  padding: 16px 18px 14px;
   border-bottom: 1px solid var(--line);
   background: var(--panel);
 }
@@ -115,29 +120,26 @@ button {
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
 }
 
 .brand-mark {
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
   flex: none;
-  padding: 5px;
-  border-radius: 8px;
-  background: var(--accent);
-  color: var(--on-accent);
+  color: var(--ink);
 }
 
 .brand h1 {
   margin: 0;
-  font-size: 15px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
 }
 
 .brand p {
-  margin: 1px 0 0;
-  font-size: 11.5px;
+  margin: 0;
+  font-size: 12px;
   color: var(--ink-3);
 }
 
@@ -146,10 +148,10 @@ button {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 16px 17px 32px;
+  padding: 16px 18px 32px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 22px;
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar) transparent;
 }
@@ -175,7 +177,7 @@ button {
   gap: 10px;
   align-items: flex-start;
   padding: 11px 12px;
-  border-radius: 11px;
+  border-radius: 10px;
   background: var(--danger-bg);
   color: var(--danger-ink);
 }
@@ -202,11 +204,11 @@ button {
 .no-safe-route {
   margin: 0 0 10px;
   padding: 10px 12px;
-  border-radius: 11px;
+  border-radius: 10px;
   background: var(--danger-bg);
   color: var(--danger-ink);
   font-size: 12.5px;
-  font-weight: 600;
+  font-weight: 550;
   line-height: 1.45;
 }
 
@@ -230,14 +232,14 @@ button {
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 5px;
-  font-size: 11.5px;
-  font-weight: 550;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--ink-2);
 }
 
 .field-note {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 400;
   color: var(--ink-3);
 }
@@ -252,7 +254,7 @@ button {
 .form-note {
   grid-column: 1 / -1;
   margin: -4px 0 0;
-  font-size: 10.5px;
+  font-size: 11px;
   line-height: 1.45;
   color: var(--ink-3);
 }
@@ -264,13 +266,14 @@ button {
 .text-input {
   width: 100%;
   height: 36px;
-  padding: 0 10px;
+  padding: 0 11px;
   border: 1px solid var(--line-strong);
-  border-radius: 9px;
+  border-radius: 8px;
   background: var(--surface);
   font-size: 13px;
   color: var(--ink);
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition: border-color 150ms var(--ease-out), box-shadow 150ms var(--ease-out),
+    background-color 150ms var(--ease-out);
 }
 
 .text-input::placeholder {
@@ -280,7 +283,7 @@ button {
 
 .text-input:focus {
   outline: none;
-  border-color: var(--accent-bright);
+  border-color: var(--ink);
   box-shadow: 0 0 0 3px var(--focus-halo);
 }
 
@@ -295,9 +298,9 @@ button {
 .input-suffix {
   position: absolute;
   top: 50%;
-  right: 10px;
+  right: 11px;
   transform: translateY(-50%);
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--ink-3);
   pointer-events: none;
 }
@@ -323,21 +326,21 @@ input[type="number"] {
   grid-template-columns: repeat(3, 1fr);
   gap: 2px;
   height: 36px;
-  padding: 2px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background: var(--surface-sunken);
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--surface);
 }
 
 .segmented button {
   border: 0;
-  border-radius: 7px;
+  border-radius: 6px;
   background: transparent;
-  font-size: 12px;
-  font-weight: 550;
-  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-3);
   font-variant-numeric: tabular-nums;
-  transition: background-color 120ms ease, color 120ms ease;
+  transition: background-color 150ms var(--ease-out), color 150ms var(--ease-out),
+    transform 120ms var(--ease-out);
 }
 
 .segmented button:hover:not([aria-pressed="true"]) {
@@ -345,9 +348,9 @@ input[type="number"] {
 }
 
 .segmented button[aria-pressed="true"] {
-  background: var(--surface);
+  background: #303036;
   color: var(--ink);
-  box-shadow: inset 0 0 0 1px var(--accent-bright);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
 .plan-button {
@@ -358,12 +361,13 @@ input[type="number"] {
   height: 38px;
   margin-top: 2px;
   border: 0;
-  border-radius: 9px;
+  border-radius: 8px;
   background: var(--accent);
   color: var(--on-accent);
   font-size: 13px;
   font-weight: 600;
-  transition: background-color 120ms ease;
+  letter-spacing: -0.005em;
+  transition: background-color 150ms var(--ease-out), transform 120ms var(--ease-out);
 }
 
 .plan-button:hover:not(:disabled) {
@@ -381,15 +385,11 @@ input[type="number"] {
   height: 13px;
   flex: none;
   border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.35);
-  border-top-color: var(--on-accent);
+  border: 2px solid rgba(135, 135, 142, 0.4);
+  border-top-color: var(--ink-2);
   animation: spin 700ms linear infinite;
 }
 
-.spinner-dark {
-  border-color: rgba(233, 238, 245, 0.18);
-  border-top-color: var(--ink-2);
-}
 
 @keyframes spin {
   to {
@@ -401,18 +401,20 @@ input[type="number"] {
 
 .place-list {
   position: absolute;
-  top: calc(100% + 4px);
+  top: calc(100% + 6px);
   left: 0;
   right: 0;
   z-index: 40;
   margin: 0;
   padding: 4px;
   list-style: none;
-  background: var(--surface);
+  background: var(--surface-hover);
   border-radius: 10px;
   box-shadow: var(--shadow-pop);
   max-height: 224px;
   overflow-y: auto;
+  transform-origin: top center;
+  animation: pop-in 160ms var(--ease-out);
 }
 
 .place-option {
@@ -420,9 +422,9 @@ input[type="number"] {
   align-items: center;
   gap: 8px;
   padding: 8px 9px;
-  border-radius: 7px;
-  font-size: 12.5px;
-  color: var(--ink);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--ink-2);
   cursor: pointer;
 }
 
@@ -432,12 +434,12 @@ input[type="number"] {
 }
 
 .place-option[data-active="true"] {
-  background: var(--accent-soft);
-  color: var(--accent-strong);
+  background: #2c2c32;
+  color: var(--ink);
 }
 
 .place-option[data-active="true"] svg {
-  color: var(--accent);
+  color: var(--ink);
 }
 
 .place-status {
@@ -459,18 +461,18 @@ input[type="number"] {
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .section-head h2 {
   margin: 0;
   font-size: 13px;
-  font-weight: 650;
-  letter-spacing: -0.005em;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .section-meta {
-  font-size: 10.5px;
+  font-size: 11.5px;
   color: var(--ink-3);
   white-space: nowrap;
 }
@@ -484,30 +486,32 @@ input[type="number"] {
 .route-list {
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 8px;
 }
 
 .route-card {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 11px;
   width: 100%;
-  padding: 12px 13px 13px;
+  padding: 13px 14px 14px;
   border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--surface);
+  border-radius: 12px;
+  background: transparent;
   text-align: left;
   color: var(--ink);
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition: border-color 150ms var(--ease-out), background-color 150ms var(--ease-out),
+    transform 120ms var(--ease-out);
+  animation: rise-in 360ms var(--ease-out) backwards;
 }
 
 .route-card:hover {
-  border-color: var(--line-strong);
+  background: var(--surface);
 }
 
 .route-card[data-selected="true"] {
-  border-color: var(--accent-bright);
-  box-shadow: 0 0 0 1px var(--accent-bright);
+  border-color: var(--line-strong);
+  background: var(--surface);
 }
 
 /* A white offset outline, so a focused card cannot be read as the selected one. */
@@ -526,20 +530,19 @@ input[type="number"] {
 .rc-letter {
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   flex: none;
-  border: 1px solid var(--line);
   border-radius: 6px;
-  background: var(--surface-sunken);
-  font-size: 11.5px;
-  font-weight: 700;
+  background: var(--surface-hover);
+  font-size: 11px;
+  font-weight: 650;
   color: var(--ink-2);
+  transition: background-color 150ms var(--ease-out), color 150ms var(--ease-out);
 }
 
 .route-card[data-selected="true"] .rc-letter {
-  border-color: var(--accent);
-  background: var(--accent);
+  background: var(--ink);
   color: var(--on-accent);
 }
 
@@ -549,8 +552,9 @@ input[type="number"] {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12.5px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 550;
+  letter-spacing: -0.005em;
 }
 
 .badge {
@@ -558,19 +562,15 @@ input[type="number"] {
   align-items: center;
   gap: 4px;
   flex: none;
-  padding: 3px 7px;
-  border-radius: 99px;
-  background: var(--accent-soft);
-  color: var(--accent-strong);
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: 0.01em;
+  color: var(--ink);
+  font-size: 11.5px;
+  font-weight: 550;
 }
 
 .rc-metrics {
   display: grid;
-  grid-template-columns: 0.85fr 0.85fr 1.3fr;
-  gap: 6px;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: 18px;
 }
 
 .rc-metric {
@@ -580,14 +580,14 @@ input[type="number"] {
 }
 
 .rc-metric > span {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--ink-3);
 }
 
 .rc-metric strong {
   overflow: hidden;
-  font-size: 12.5px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 550;
   letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -596,17 +596,15 @@ input[type="number"] {
 
 .risk-bar {
   display: flex;
-  gap: 1px;
-  height: 7px;
-  border-radius: 99px;
-  overflow: hidden;
-  background: var(--surface-sunken);
+  gap: 2px;
+  height: 6px;
 }
 
 .risk-bar > span {
   display: block;
-  min-width: 1px;
+  min-width: 2px;
   height: 100%;
+  border-radius: 2px;
 }
 
 /* The ranking inputs: the miles at the levels the ranking compares first. */
@@ -614,8 +612,8 @@ input[type="number"] {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 10px;
-  font-size: 11px;
+  gap: 4px 12px;
+  font-size: 11.5px;
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
 }
@@ -633,12 +631,12 @@ input[type="number"] {
   justify-content: space-between;
   gap: 8px;
   font-size: 11.5px;
-  color: var(--ink-2);
+  color: var(--ink-3);
 }
 
 .rc-foot strong {
-  font-weight: 650;
-  color: var(--ink);
+  font-weight: 550;
+  color: var(--ink-2);
   font-variant-numeric: tabular-nums;
 }
 
@@ -647,7 +645,8 @@ input[type="number"] {
   align-items: center;
   gap: 5px;
   white-space: nowrap;
-  font-size: 11px;
+  font-size: 11.5px;
+  color: var(--ink-2);
 }
 
 .level-dot {
@@ -659,12 +658,12 @@ input[type="number"] {
 
 .rc-reason {
   display: block;
-  padding: 8px 10px;
-  border-radius: 9px;
-  background: var(--accent-soft);
-  color: var(--accent-strong);
-  font-size: 11.5px;
-  line-height: 1.4;
+  padding-top: 11px;
+  border-top: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-wrap: pretty;
 }
 
 /* ---------- Checkpoint list ---------- */
@@ -672,25 +671,22 @@ input[type="number"] {
 .cp-list {
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--line);
-  overflow: hidden;
+  margin: 0 -10px;
 }
 
 .cp-row {
   display: grid;
   grid-template-columns: 8px minmax(0, 1fr);
   align-items: start;
-  gap: 8px;
+  gap: 10px;
   padding: 7px 10px;
   border: 0;
-  background: var(--surface);
-  font-size: 11.5px;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 12.5px;
   color: var(--ink-2);
   text-align: left;
-  transition: background-color 100ms ease;
+  transition: background-color 120ms var(--ease-out);
 }
 
 /* The list clips its corners, so the ring is drawn inside the row. */
@@ -701,21 +697,21 @@ input[type="number"] {
 }
 
 .cp-row:hover {
-  background: var(--surface-hover);
+  background: var(--surface);
 }
 
 .cp-row[aria-current="true"] {
-  background: var(--accent-soft);
+  background: var(--surface-hover);
 }
 
 .cp-row[aria-current="true"] .cp-mile {
-  color: var(--accent-strong);
+  color: var(--ink);
 }
 
 .cp-dot {
   width: 8px;
   height: 8px;
-  margin-top: 4px;
+  margin-top: 5px;
   border-radius: 50%;
 }
 
@@ -737,7 +733,7 @@ input[type="number"] {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 550;
+  font-weight: 500;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
@@ -745,15 +741,15 @@ input[type="number"] {
 .cp-time {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  color: var(--ink-2);
+  color: var(--ink-3);
 }
 
 .cp-detail {
   display: flex;
   flex-wrap: wrap;
   gap: 1px 8px;
-  font-size: 10.5px;
-  line-height: 1.35;
+  font-size: 11.5px;
+  line-height: 1.4;
 }
 
 .cp-level {
@@ -791,8 +787,8 @@ input[type="number"] {
 }
 
 .skeleton-card {
-  height: 118px;
-  border-radius: 14px;
+  height: 132px;
+  border-radius: 12px;
 }
 
 @keyframes shimmer {
@@ -808,72 +804,43 @@ input[type="number"] {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 11px;
-  border-radius: 9px;
-  background: var(--surface-sunken);
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--ink-2);
 }
 
 .empty {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding-top: 2px;
+  gap: 8px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
 }
 
-.empty-art {
-  display: block;
-  width: 100%;
-  height: auto;
-  border-radius: 12px;
-}
 
 .empty h2 {
-  margin: 4px 0 0;
-  font-size: 14px;
-  font-weight: 650;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
   letter-spacing: -0.01em;
 }
 
 .empty p {
   margin: 0;
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 12.5px;
+  line-height: 1.55;
   color: var(--ink-2);
+  text-wrap: pretty;
 }
 
-.empty-points {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 3px 0 0;
-  padding: 0;
-  list-style: none;
-}
 
-.empty-points li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11.5px;
-  color: var(--ink-2);
-}
 
-.empty-points li::before {
-  content: "";
-  width: 4px;
-  height: 4px;
-  flex: none;
-  border-radius: 50%;
-  background: var(--line-strong);
-}
 
 .fine-print {
-  margin: -4px 0 0;
-  font-size: 10.5px;
+  margin: -6px 0 0;
+  font-size: 11px;
   line-height: 1.5;
   color: var(--ink-3);
+  text-wrap: pretty;
 }
 
 /* ---------- Map and dock ---------- */
@@ -911,8 +878,8 @@ input[type="number"] {
 
 .map .maplibregl-ctrl-group {
   background: var(--surface);
-  border-radius: 10px;
-  box-shadow: 0 6px 18px -10px rgba(0, 0, 0, 0.8);
+  border-radius: 8px;
+  box-shadow: var(--shadow-pop);
 }
 
 .map .maplibregl-ctrl-group button {
@@ -936,12 +903,12 @@ input[type="number"] {
 }
 
 .map .maplibregl-ctrl-attrib a {
-  color: var(--accent-strong);
+  color: var(--ink-2);
 }
 
 .map .maplibregl-ctrl-attrib.maplibregl-compact {
-  background-color: rgba(8, 11, 16, 0.82);
-  color: var(--ink-2);
+  background-color: rgba(10, 10, 11, 0.82);
+  color: var(--ink-3);
 }
 
 .map .maplibregl-ctrl-attrib-button {
@@ -960,12 +927,13 @@ input[type="number"] {
   z-index: 5;
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  width: min(640px, calc(100% - 28px));
-  padding: 11px 15px 9px;
-  border-radius: 14px;
+  gap: 8px;
+  width: min(620px, calc(100% - 28px));
+  padding: 12px 16px 11px;
+  border-radius: 12px;
   background: var(--surface);
   box-shadow: var(--shadow-dock);
+  animation: dock-in 420ms var(--ease-out) backwards;
 }
 
 .hour-slider {
@@ -983,14 +951,14 @@ input[type="number"] {
 
 .hour-label {
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 550;
   letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
 .hour-context {
-  font-size: 10.5px;
+  font-size: 11.5px;
   color: var(--ink-3);
   white-space: nowrap;
 }
@@ -999,15 +967,16 @@ input[type="number"] {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
-  height: 20px;
+  height: 22px;
   margin: 2px 0 0;
   border: 0;
   background-color: transparent;
   background-repeat: no-repeat;
   background-position: center;
-  background-size: 100% 4px;
+  background-size: 100% 3px;
   border-radius: 99px;
   cursor: pointer;
+  touch-action: pan-y;
 }
 
 .hour-range::-webkit-slider-runnable-track {
@@ -1021,10 +990,11 @@ input[type="number"] {
   width: 16px;
   height: 16px;
   margin-top: -6px;
-  border: 2px solid var(--accent-bright);
+  border: 0;
   border-radius: 50%;
-  background: var(--panel);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  background: var(--ink);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6), 0 0 0 4px var(--surface);
+  transition: transform 150ms var(--ease-out);
 }
 
 .hour-range::-moz-range-track {
@@ -1034,12 +1004,12 @@ input[type="number"] {
 }
 
 .hour-range::-moz-range-thumb {
-  width: 13px;
-  height: 13px;
-  border: 2px solid var(--accent-bright);
+  width: 16px;
+  height: 16px;
+  border: 0;
   border-radius: 50%;
-  background: var(--panel);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  background: var(--ink);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6), 0 0 0 4px var(--surface);
 }
 
 .hour-range:focus-visible {
@@ -1048,18 +1018,18 @@ input[type="number"] {
 
 /* A full-opacity ring on the thumb: the old 24% halo was under 2:1 against the dock. */
 .hour-range:focus-visible::-webkit-slider-thumb {
-  box-shadow: 0 0 0 3px var(--accent-bright), 0 1px 3px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 0 0 4px var(--surface), 0 0 0 6px var(--ink);
 }
 
 .hour-range:focus-visible::-moz-range-thumb {
-  box-shadow: 0 0 0 3px var(--accent-bright), 0 1px 3px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 0 0 4px var(--surface), 0 0 0 6px var(--ink);
 }
 
 .range-ticks {
   display: flex;
   justify-content: space-between;
-  margin-top: -3px;
-  font-size: 9.5px;
+  margin-top: -2px;
+  font-size: 10.5px;
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;
 }
@@ -1069,8 +1039,7 @@ input[type="number"] {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding-top: 6px;
-  border-top: 1px solid var(--line);
+  padding-top: 2px;
 }
 
 .legend {
@@ -1086,17 +1055,17 @@ input[type="number"] {
 .legend li {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 10.5px;
+  gap: 6px;
+  font-size: 11.5px;
   color: var(--ink-2);
   white-space: nowrap;
 }
 
 .legend-dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   flex: none;
-  border-radius: 2px;
+  border-radius: 50%;
 }
 
 
@@ -1113,6 +1082,7 @@ input[type="number"] {
   color: var(--ink);
   box-shadow: var(--shadow-pop);
   overflow: hidden;
+  animation: pop-in 180ms var(--ease-out);
 }
 
 .map .maplibregl-popup-anchor-top .maplibregl-popup-tip,
@@ -1153,8 +1123,8 @@ input[type="number"] {
 }
 
 .popup {
-  width: 280px;
-  padding: 12px 30px 11px 13px;
+  width: 264px;
+  padding: 13px 32px 13px 14px;
   color: var(--ink);
 }
 
@@ -1173,8 +1143,9 @@ input[type="number"] {
 }
 
 .popup-level {
-  font-size: 12.5px;
-  font-weight: 650;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .popup-mile {
@@ -1182,15 +1153,15 @@ input[type="number"] {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10.5px;
+  font-size: 11.5px;
   color: var(--ink-3);
 }
 
 .popup-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 9px 12px;
-  margin: 11px 0 0;
+  gap: 10px 12px;
+  margin: 12px 0 0;
 }
 
 .popup-wide {
@@ -1198,31 +1169,29 @@ input[type="number"] {
 }
 
 .popup-grid dt {
-  font-size: 9.5px;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+  font-size: 11px;
   color: var(--ink-3);
 }
 
 .popup-grid dd {
   margin: 1px 0 0;
-  font-size: 12px;
-  font-weight: 550;
+  font-size: 12.5px;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
 .popup-sub {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 400;
   color: var(--ink-3);
 }
 
 .popup-cause {
-  margin: 10px 0 0;
-  padding-top: 8px;
+  margin: 12px 0 0;
+  padding-top: 10px;
   border-top: 1px solid var(--line);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.45;
   color: var(--ink-2);
 }
@@ -1318,12 +1287,10 @@ input[type="number"] {
 
 .plan-summary {
   margin: 0;
-  padding: 9px 11px;
-  border-radius: 10px;
-  background: var(--surface-sunken);
-  font-size: 11.5px;
-  line-height: 1.45;
+  font-size: 12px;
+  line-height: 1.5;
   color: var(--ink-2);
+  text-wrap: pretty;
 }
 
 .error-previous {
@@ -1334,8 +1301,8 @@ input[type="number"] {
 .popup-condition {
   display: block;
   margin-top: 1px;
-  font-size: 10.5px;
-  font-weight: 550;
+  font-size: 11.5px;
+  font-weight: 500;
 }
 
 .map-unavailable {
@@ -1351,50 +1318,46 @@ input[type="number"] {
 .demo-callout {
   display: flex;
   flex-direction: column;
-  gap: 9px;
-  margin-top: 6px;
-  padding: 11px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface-sunken);
+  gap: 10px;
+  margin-top: 14px;
 }
 
 .secondary-button {
-  height: 34px;
+  height: 36px;
   border: 1px solid var(--line-strong);
-  border-radius: 9px;
-  background: var(--surface);
+  border-radius: 8px;
+  background: transparent;
   color: var(--ink);
-  font-size: 12.5px;
-  font-weight: 600;
-  transition: background-color 120ms ease, border-color 120ms ease;
+  font-size: 13px;
+  font-weight: 550;
+  transition: background-color 150ms var(--ease-out), border-color 150ms var(--ease-out),
+    transform 120ms var(--ease-out);
 }
 
 .secondary-button:hover {
-  border-color: var(--accent-bright);
-  background: var(--surface-hover);
+  border-color: var(--ink-2);
+  background: var(--surface);
 }
 
 .demo-banner {
   display: flex;
   flex-direction: column;
-  gap: 9px;
-  padding: 10px 11px;
-  border: 1px solid var(--accent-soft);
-  border-radius: 10px;
-  background: var(--surface-sunken);
+  gap: 10px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
 }
 
 .demo-banner p {
   margin: 0;
-  font-size: 11.5px;
-  line-height: 1.45;
+  font-size: 12px;
+  line-height: 1.5;
   color: var(--ink-2);
+  text-wrap: pretty;
 }
 
 .demo-banner strong {
-  color: var(--accent-strong);
-  font-weight: 650;
+  color: var(--ink);
+  font-weight: 600;
 }
 
 .demo-loads {
@@ -1408,7 +1371,84 @@ input[type="number"] {
 
 .loading-note {
   margin: 0 0 2px;
-  font-size: 11.5px;
-  line-height: 1.45;
+  font-size: 12px;
+  line-height: 1.5;
   color: var(--ink-2);
+}
+
+/* ---------- Press, entrance and touch ---------- */
+
+.plan-button:active:not(:disabled),
+.secondary-button:active,
+.segmented button:active {
+  transform: scale(0.97);
+}
+
+.route-card:active {
+  transform: scale(0.99);
+}
+
+/* The one staged moment: a new plan's routes rise in, best route first. */
+.route-card:nth-child(2) {
+  animation-delay: 50ms;
+}
+
+.route-card:nth-child(3) {
+  animation-delay: 100ms;
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes dock-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 10px);
+  }
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+@media (hover: hover) {
+  .hour-range:hover::-webkit-slider-thumb {
+    transform: scale(1.12);
+  }
+}
+
+@media (hover: none) {
+  .route-card:hover:not([data-selected="true"]),
+  .cp-row:hover:not([aria-current="true"]) {
+    background: transparent;
+  }
+}
+
+/* A thumb needs 44px; a mouse does not. */
+@media (pointer: coarse) {
+  .text-input,
+  .segmented {
+    height: 44px;
+  }
+
+  .text-input {
+    font-size: 16px;
+  }
+
+  .plan-button,
+  .secondary-button {
+    height: 46px;
+  }
+
+  .cp-row {
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
 }

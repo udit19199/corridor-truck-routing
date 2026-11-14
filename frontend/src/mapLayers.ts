@@ -15,11 +15,11 @@ import { prefersReducedMotion } from "./format";
 import { LEVELS } from "./levels";
 import { truckFeatures, type PlanLayers } from "./planGeoJson";
 
-const ACCENT = "#6aa8ff";
-const ROUTE_IDLE = "#66778c";
-const TRUCK_FILL = "#0f1722";
-const TRUCK_RING = "#c2cedd";
-const CHECKPOINT_STROKE = "#0b1017";
+const ACCENT = "#f4f4f5";
+const ROUTE_IDLE = "#74747c";
+const TRUCK_FILL = "#0e0e10";
+const TRUCK_RING = "#8f8f97";
+const CHECKPOINT_STROKE = "#0a0a0b";
 const HEAT_SOURCE = "heat";
 const ROUTES_SOURCE = "routes";
 const CHECKPOINTS_SOURCE = "checkpoints";
@@ -66,7 +66,7 @@ export function installLayers(map: MapLibreMap): void {
       source: HEAT_SOURCE,
       paint: {
         "fill-color": HEAT_COLOR,
-        "fill-opacity": 0.5,
+        "fill-opacity": 0.34,
         "fill-antialias": false,
       },
     },
@@ -152,10 +152,10 @@ export function installLayers(map: MapLibreMap): void {
     source: TRUCKS_SOURCE,
     filter: ["==", ["get", "routeId"], ""],
     paint: {
-      "circle-color": ACCENT,
+      "circle-color": TRUCK_FILL,
       "circle-radius": 9,
-      "circle-stroke-color": CHECKPOINT_STROKE,
-      "circle-stroke-width": 2,
+      "circle-stroke-color": ACCENT,
+      "circle-stroke-width": 2.5,
     },
   });
   map.addLayer({

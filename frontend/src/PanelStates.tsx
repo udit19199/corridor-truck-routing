@@ -60,51 +60,11 @@ export function ErrorBanner({
 export function EmptyState({ onDemo }: { onDemo: () => void }) {
   return (
     <div className="empty">
-      <svg
-        className="empty-art"
-        viewBox="0 0 320 84"
-        role="img"
-        aria-label="Two cities joined by a dotted route with weather cells"
-      >
-        <rect
-          x="0"
-          y="0"
-          width="320"
-          height="84"
-          rx="12"
-          fill="var(--surface-sunken)"
-        />
-        <rect x="24" y="20" width="42" height="42" rx="6" fill="#1b2735" />
-        <rect x="230" y="12" width="50" height="50" rx="6" fill="#222f3e" />
-        <rect x="150" y="48" width="38" height="38" rx="6" fill="#18232f" />
-        <path
-          d="M62 57 C 108 57, 112 27, 158 27 S 214 46, 248 46"
-          fill="none"
-          stroke="var(--accent-bright)"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeDasharray="1 6"
-        />
-        <circle
-          cx="62"
-          cy="57"
-          r="5"
-          fill="var(--panel)"
-          stroke="var(--accent-bright)"
-          strokeWidth="2"
-        />
-        <circle cx="248" cy="46" r="5" fill="var(--accent-bright)" />
-      </svg>
       <h2>Plan a weather-safe run</h2>
       <p>
         Pick two US cities, a departure time and a load. You’ll get three routes
         ranked by risk, with the forecast along each corridor.
       </p>
-      <ul className="empty-points">
-        <li>Three routes, ranked by risk</li>
-        <li>Weather at every checkpoint</li>
-        <li>Hourly corridor heatmap</li>
-      </ul>
       <div className="demo-callout">
         <p>
           Calm weather everywhere today? Run the storm demo: recorded Dallas to
@@ -196,7 +156,7 @@ export function RefreshState() {
       role="status"
       aria-live="polite"
     >
-      <span className="spinner spinner-dark" aria-hidden="true" />
+      <span className="spinner" aria-hidden="true" />
       Updating plan…
     </div>
   );
