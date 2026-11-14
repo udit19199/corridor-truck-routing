@@ -21,7 +21,8 @@ from trips.geometry import (
     point_and_time_at,
     thin_track,
 )
-from trips.providers import NoRouteError, Providers
+from trips.providers import Providers
+from trips.remote import NoRouteError
 from trips.rules import classify, covered_miles, rank, summarize
 
 HEATMAP_HOURS = 49

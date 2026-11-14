@@ -13,7 +13,8 @@ from django.views.decorators.http import require_GET, require_POST
 from trips.domain import Checkpoint, Place, Plan, Route
 from trips.geometry import haversine
 from trips.planner import PlanRequest, plan_trip
-from trips.providers import NoRouteError, ProviderError, demo_providers, get_providers
+from trips.providers import demo_providers, get_providers
+from trips.remote import NoRouteError, ProviderError
 
 logger = logging.getLogger(__name__)
 

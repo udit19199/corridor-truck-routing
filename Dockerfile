@@ -6,7 +6,7 @@ COPY frontend/ ./
 RUN npm run build
 
 FROM python:3.13-slim AS deps
-COPY --from=ghcr.io/astral-sh/uv:0.9.30 /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.13.3 /uv /usr/local/bin/uv
 ENV UV_PROJECT_ENVIRONMENT=/venv \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy

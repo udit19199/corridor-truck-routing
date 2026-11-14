@@ -17,34 +17,32 @@ The app runs on Render's free plan. The first load after a quiet period can take
 
 ## Run locally
 
-Needs Python 3.13+ with [uv](https://docs.astral.sh/uv/) and Node 22+.
+Needs Python 3.13 with [uv](https://docs.astral.sh/uv/) and Node 22. `backend/.python-version`, `.nvmrc` and `frontend/package.json` declare both.
 
 ```sh
-cd backend
-uv sync
-ROUTING_PROVIDER=fixture WEATHER_PROVIDER=fixture DEBUG=true uv run python manage.py runserver 8000
+make setup
 
-# second terminal
-cd frontend
-npm ci
-npm run dev
+# terminal one
+make dev-backend
+
+# terminal two
+make dev-frontend
 ```
 
-For live routes, put `TOMTOM_API_KEY=...` in `backend/.env` and drop the two fixture variables. Open-Meteo needs no key.
+`make dev-backend` serves recorded routes and the scripted storm, so it needs no keys. For live routes, put `TOMTOM_API_KEY=...` in `backend/.env` and run `make dev-live` instead. Open-Meteo needs no key.
 
 ## Tests and deploys
 
 ```sh
-cd frontend
-npm ci
-npx playwright install chromium
-npm run test:e2e
+make check   # ruff, ty, Django checks, fixture check, frontend build
+make test    # Playwright against the real UI
 ```
 
 The Playwright suite drives the real UI against recorded routes. CI runs lint, types, the production build, those tests and a Docker image smoke test. Render deploys `main` only after CI passes.
 
 ## Decisions
 
+- **One entry point.** The root `Makefile` wraps both halves of the repo, and each target mirrors a CI job, so a local pass means what a green CI means.
 - **One owner for the rules.** Thresholds and load rules live in `backend/trips/rules.py`. The API sends levels as numbers; `frontend/src/lib/levels.ts` maps them to names and colours.
 - **One request per plan.** The response carries the routes, checkpoints and all 49 forecast hours, so the slider only repaints the map.
 - **No database.** A plan is computed from live data; weather is cached per cell and hour for 30 minutes in the one Gunicorn process.

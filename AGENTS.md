@@ -130,30 +130,34 @@ After that: times in the route's own time zone, scoring gusts for empty trailers
 
 ### Commands
 
+The root `Makefile` is the one entry point; CI runs the same steps.
+
 | Task | Command |
 |---|---|
-| Backend dev server, no keys | `cd backend && ROUTING_PROVIDER=fixture WEATHER_PROVIDER=fixture uv run python manage.py runserver 8000` |
-| Frontend dev server | `cd frontend && npm run dev` (proxies `/api` to port 8000) |
-| Fixture sanity script | `cd backend && ROUTING_PROVIDER=fixture WEATHER_PROVIDER=fixture uv run python check_fixture.py` |
-| Backend type check | `cd backend && uv run ty check trips config` |
-| End-to-end tests | `cd frontend && npm run test:e2e` (installs nothing; builds the frontend, starts Django in fixture mode) |
-| Workflow lint | `uvx --from actionlint-py actionlint && uvx zizmor .github/` |
+| Install both halves | `make setup` |
+| Backend dev server, no keys | `make dev-backend` |
+| Backend dev server, live providers | `make dev-live` (reads `TOMTOM_API_KEY` from `backend/.env`) |
+| Frontend dev server | `make dev-frontend` (proxies `/api` to port 8000) |
+| Ruff, format check, ty, Django checks, fixture check, frontend build | `make check` |
+| End-to-end tests | `make test` (installs nothing; builds the frontend, starts Django in fixture mode) |
+| Workflow lint | `uvx --from actionlint-py==1.7.12.25 actionlint && uvx zizmor==1.32.0 .github/` |
 
 ### Verification by change type
 
 | Change | Run before calling it done |
 |---|---|
-| `backend/trips/rules.py`, `planner.py`, `geometry.py` | `uv run ruff check . && uv run ruff format --check . && uv run ty check trips config`, `check_fixture.py`, the Playwright suite |
-| `backend/trips/providers.py` | ruff, ty, one live request against the real API, the Playwright suite |
-| `frontend/src/**` | `npx tsc --noEmit && npm run build`, the Playwright suite, and look at the page in a browser |
-| API contract | Update section 4 and `frontend/src/api.ts` in the same change, then the Playwright suite |
-| `frontend/tests/**` | the Playwright suite passes twice in a row |
+| `backend/trips/rules.py`, `planner.py`, `geometry.py`, `providers.py` | `make check`, `make test` |
+| `backend/trips/tomtom.py`, `weather.py`, `remote.py`, `recorded.py` | `make check`, one live request against the real API, `make test` |
+| `frontend/src/**` | `make check`, `make test`, and look at the page in a browser |
+| API contract | Update section 4 and `frontend/src/api.ts` in the same change, then `make test` |
+| `frontend/tests/**` | `make test` passes twice in a row |
 
 ### Working rules
 
 - CI (`.github/workflows/ci.yml`) runs every check in the table above plus a Docker build and smoke test. Render deploys `main` only when CI passes, so never push to `main` with a failing check. Pin new actions to a commit SHA with the version in a comment.
 
-- Risk thresholds and load rules live only in `backend/trips/rules.py`. The API sends levels as numbers; the front end maps them to names and colours only in `frontend/src/levels.ts`. Never copy thresholds into the front end.
+- Toolchain versions are pinned in `.nvmrc`, `frontend/package.json` (`engines`), `backend/.python-version`, `Dockerfile` and `.github/workflows/ci.yml`. Change them in all five places together, and never let CI float. `backend/.python-version` must stay next to `pyproject.toml`, because uv stops looking for it at the workspace root.
+- Risk thresholds and load rules live only in `backend/trips/rules.py`. The API sends levels as numbers; the front end maps them to names and colours only in `frontend/src/lib/levels.ts`. Never copy thresholds into the front end.
 - Never put an API key in code, fixtures, logs or the browser bundle. Keys come from env vars; `backend/.env` is ignored by git.
 - Never commit local notes or working files.
 - Never add unit tests. Coverage comes from the Playwright suite in `frontend/tests/`, which runs against fixture providers.
