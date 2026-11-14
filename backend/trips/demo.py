@@ -9,8 +9,8 @@ from pathlib import Path
 
 from trips.domain import Cell, Place, RouteOption, Weather
 
-FIXTURES_DIR = Path(__file__).parent / "fixtures"
-FIXTURE_CITIES = [
+ROUTES_FILE = Path(__file__).parent / "demo_routes.json"
+DEMO_CITIES = [
     Place("Dallas, TX", -96.7970, 32.7767),
     Place("Chicago, IL", -87.6298, 41.8781),
     Place("Oklahoma City, OK", -97.5164, 35.4676),
@@ -24,7 +24,7 @@ FIXTURE_CITIES = [
 
 @cache
 def _routes() -> list[RouteOption]:
-    data = json.loads((FIXTURES_DIR / "dallas_chicago.json").read_text())
+    data = json.loads(ROUTES_FILE.read_text())
     return [
         RouteOption(
             name=str(route["name"]),
@@ -37,7 +37,7 @@ def _routes() -> list[RouteOption]:
 
 def geocode(query: str) -> list[Place]:
     prefix = query.strip().lower()
-    return [place for place in FIXTURE_CITIES if place.label.lower().startswith(prefix)][:5]
+    return [place for place in DEMO_CITIES if place.label.lower().startswith(prefix)][:5]
 
 
 def routes_for(

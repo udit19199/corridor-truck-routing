@@ -116,7 +116,7 @@ test("heatmap slider repaints without any network request", async ({ page }) => 
 });
 
 test("warns when every route crosses No Travel weather, and still ranks them", async ({ page }) => {
-  // The fixture storm never reaches No Travel, so give every route some No Travel miles.
+  // The demo storm never reaches No Travel, so give every route some No Travel miles.
   await page.route("**/api/plan", async (route) => {
     const response = await route.fetch();
     const plan = await response.json();

@@ -10,7 +10,7 @@ setup:
 	cd frontend && npx playwright install --with-deps chromium
 
 dev-backend:
-	cd backend && DEBUG=true ROUTING_PROVIDER=fixture WEATHER_PROVIDER=fixture uv run python manage.py runserver 8000
+	cd backend && DEBUG=true DEMO_DATA=true uv run python manage.py runserver 8000
 
 # Runs with live providers, loading backend/.env (copy backend/.env.example first).
 # Variables already set in the shell win over that file, so set none.
@@ -25,7 +25,6 @@ check:
 	cd backend && uv run --frozen ruff format --check .
 	cd backend && uv run --frozen ty check trips config
 	cd backend && uv run --frozen python manage.py check
-	cd backend && ROUTING_PROVIDER=fixture WEATHER_PROVIDER=fixture uv run --frozen python check_fixture.py
 	cd frontend && npm run build
 
 test:

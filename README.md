@@ -34,7 +34,7 @@ make dev-frontend
 ## Tests and deploys
 
 ```sh
-make check   # ruff, ty, Django checks, fixture check, frontend build
+make check   # ruff, ty, Django checks, frontend build
 make test    # Playwright against the real UI
 ```
 

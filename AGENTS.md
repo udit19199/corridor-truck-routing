@@ -57,7 +57,7 @@ The reason compares the winner with each other route on the first key where it w
 5. Classify every checkpoint, summarise the route by level, rank, and write the reason.
 6. Heatmap: the same classifier for every cell and each of the 49 hours.
 
-Measured: 85 ms for the fixture plan; a live Dallas to Chicago plan takes 10.4 s cold, 7.9 s warm, most of it TomTom. With a 25 mile interval the response is 216 KB raw, 52 KB gzip. Two cold plans that overlap fetch their own cells; the cache covers repeat and nearby plans.
+Measured: 85 ms for the demo plan; a live Dallas to Chicago plan takes 10.4 s cold, 7.9 s warm, most of it TomTom. With a 25 mile interval the response is 216 KB raw, 52 KB gzip. Two cold plans that overlap fetch their own cells; the cache covers repeat and nearby plans.
 
 ## 4. API
 
@@ -116,7 +116,7 @@ interface Heatmap {
 - **One request per plan.** The response carries all 49 heatmap hours. A slider move sets one feature state per cell and replaces a three-point truck source; it never rebuilds the GeoJSON or touches the style. With a 4x CPU throttle the p95 frame time was 32.6 ms, with no source reload.
 - **No database.** A plan is computed fresh. One Gunicorn worker owns the in-memory weather and geocode cache; threads carry the I/O. Redis is the first step past one instance.
 - **Adaptive cells.** Open-Meteo's 600 locations per minute is the binding limit. Cells stay at 0.25° where that fits, grow on long trips, and the plan throttles to six a minute per client.
-- **Fixtures and a demo.** Recorded Dallas to Chicago routes and a scripted storm make the Playwright suite repeatable without keys, and let a reviewer see the load rule change the pick on a calm day. The UI labels it as not live weather.
+- **Demo data.** Recorded Dallas to Chicago routes and a scripted storm make the Playwright suite repeatable without keys, and let a reviewer see the load rule change the pick on a calm day. The UI labels it as not live weather.
 - **Keys and errors stay on the server.** `TOMTOM_API_KEY` never reaches the browser, logs or tracebacks. Provider failures are logged as service, status and elapsed time, then mapped to 502 with a plain sentence. Input is validated before any provider call.
 - **Failure behaviour.** A replan that fails leaves the previous results with a banner. A map that cannot load leaves the routes and checkpoints in the panel. A provider that returns unreadable data is a 502, not a crash.
 
@@ -138,8 +138,8 @@ The root `Makefile` is the one entry point; CI runs the same steps.
 | Backend dev server, no keys | `make dev-backend` |
 | Backend dev server, live providers | `make dev-live` (reads `TOMTOM_API_KEY` from `backend/.env`) |
 | Frontend dev server | `make dev-frontend` (proxies `/api` to port 8000) |
-| Ruff, format check, ty, Django checks, fixture check, frontend build | `make check` |
-| End-to-end tests | `make test` (installs nothing; builds the frontend, starts Django in fixture mode) |
+| Ruff, format check, ty, Django checks, frontend build | `make check` |
+| End-to-end tests | `make test` (installs nothing; builds the frontend, starts Django with `DEMO_DATA=true`) |
 | Workflow lint | `uvx --from actionlint-py==1.7.12.25 actionlint && uvx zizmor==1.32.0 .github/` |
 
 ### Verification by change type
@@ -147,7 +147,7 @@ The root `Makefile` is the one entry point; CI runs the same steps.
 | Change | Run before calling it done |
 |---|---|
 | `backend/trips/rules.py`, `wording.py`, `planner.py`, `geometry.py`, `providers.py` | `make check`, `make test` |
-| `backend/trips/tomtom.py`, `weather.py`, `remote.py`, `recorded.py` | `make check`, one live request against the real API, `make test` |
+| `backend/trips/tomtom.py`, `weather.py`, `remote.py`, `demo.py` | `make check`, one live request against the real API, `make test` |
 | `frontend/src/**` | `make check`, `make test`, and look at the page in a browser |
 | API contract | Update section 4 and `frontend/src/api.ts` in the same change, then `make test` |
 | `frontend/tests/**` | `make test` passes twice in a row |
@@ -158,9 +158,9 @@ The root `Makefile` is the one entry point; CI runs the same steps.
 
 - Toolchain versions are pinned in `.nvmrc`, `frontend/package.json` (`engines`), `backend/.python-version`, `Dockerfile` and `.github/workflows/ci.yml`. Change them in all five places together, and never let CI float. `backend/.python-version` must stay next to `pyproject.toml`, because uv stops looking for it at the workspace root.
 - Risk thresholds and load rules live only in `backend/trips/rules.py`. The API sends levels as numbers; the front end maps them to names and colours only in `frontend/src/lib/levels.ts`. Never copy thresholds into the front end.
-- Never put an API key in code, fixtures, logs or the browser bundle. Keys come from env vars; `backend/.env` is ignored by git.
+- Never put an API key in code, demo data, logs or the browser bundle. Keys come from env vars; `backend/.env` is ignored by git.
 - Never commit local notes or working files.
-- Never add unit tests. Coverage comes from the Playwright suite in `frontend/tests/`, which runs against fixture providers.
+- Never add unit tests. Coverage comes from the Playwright suite in `frontend/tests/`, which runs against the recorded demo data.
 - The heatmap slider must not trigger a network request, rebuild the heat GeoJSON or change the style. A move sets one feature state per heat cell and replaces the three-point truck source (see section 5). Keep it that way.
 - Do not run React Doctor (`react-doctor` 0.9.22) locally. Its process keeps growing after it prints results (tens of GB, even with `--no-parallel`). Check React code with `tsc` and the Playwright suite.
-- Fixture data in `backend/trips/fixtures/` is recorded. Re-record it with a script; do not hand-edit coordinates.
+- Demo data in `backend/trips/demo_routes.json` is recorded TomTom output. Re-record it with a script; do not hand-edit coordinates.

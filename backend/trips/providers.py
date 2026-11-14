@@ -1,11 +1,11 @@
-"""Chooses which provider implementations a plan runs against."""
+"""Chooses live providers, or the recorded demo data when DEMO_DATA is set."""
 
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
-from trips import recorded, tomtom, weather
+from trips import demo, tomtom, weather
 from trips.domain import Cell, Place, RouteOption, Weather
 
 
@@ -17,22 +17,10 @@ class Providers:
 
 
 def demo_providers() -> Providers:
-    return Providers(geocode=recorded.geocode, routes=recorded.routes_for, hourly=recorded.hourly)
+    return Providers(geocode=demo.geocode, routes=demo.routes_for, hourly=demo.hourly)
 
 
 def get_providers() -> Providers:
-    routing = os.environ.get("ROUTING_PROVIDER", "tomtom").strip().lower()
-    forecast = os.environ.get("WEATHER_PROVIDER", "openmeteo").strip().lower()
-
-    routing_options = {
-        "tomtom": (tomtom.geocode, tomtom.routes),
-        "fixture": (recorded.geocode, recorded.routes_for),
-    }
-    weather_options = {"openmeteo": weather.hourly, "fixture": recorded.hourly}
-    if routing not in routing_options:
-        raise ValueError(f"Unknown ROUTING_PROVIDER: {routing}")
-    if forecast not in weather_options:
-        raise ValueError(f"Unknown WEATHER_PROVIDER: {forecast}")
-
-    geocode, routes = routing_options[routing]
-    return Providers(geocode=geocode, routes=routes, hourly=weather_options[forecast])
+    if os.environ.get("DEMO_DATA", "").lower() in {"1", "true", "yes"}:
+        return demo_providers()
+    return Providers(geocode=tomtom.geocode, routes=tomtom.routes, hourly=weather.hourly)

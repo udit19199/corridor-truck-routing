@@ -32,15 +32,12 @@ jobs:
         run: uvx zizmor==1.32.0 --format=github .github/
 
   backend:
-    name: Backend (ruff, ty, fixture check)
+    name: Backend (ruff, ty, Django checks)
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     defaults:
       run:
         working-directory: backend
-    env:
-      ROUTING_PROVIDER: fixture
-      WEATHER_PROVIDER: fixture
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -59,8 +56,6 @@ jobs:
         run: uv run ty check trips config
       - name: Django system checks
         run: uv run python manage.py check
-      - name: Fixture pipeline check
-        run: uv run python check_fixture.py
 
   frontend:
     name: Frontend (tsc, build)
@@ -83,7 +78,7 @@ jobs:
         run: npm run build
 
   e2e:
-    name: End-to-end (Playwright, fixture mode)
+    name: End-to-end (Playwright, demo data)
     needs: [backend, frontend]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -142,7 +137,7 @@ jobs:
         run: |
           docker run --detach --name app --publish 8000:8000 \
             --env SECRET_KEY=ci-only --env ALLOWED_HOSTS=localhost \
-            --env ROUTING_PROVIDER=fixture --env WEATHER_PROVIDER=fixture \
+            --env DEMO_DATA=true \
             corridor:ci
           curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 2 \
             http://localhost:8000/api/health
