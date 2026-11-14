@@ -25,23 +25,6 @@ interface TripFormProps {
   onCancel: () => void;
 }
 
-function FieldError({
-  id,
-  message,
-}: {
-  id: string;
-  message: string | undefined;
-}) {
-  if (message === undefined) {
-    return null;
-  }
-  return (
-    <p className="field-error" id={id} data-testid={id}>
-      {message}
-    </p>
-  );
-}
-
 export default function TripForm({
   loading,
   planIntervalMi,
@@ -63,14 +46,9 @@ export default function TripForm({
 
   // Read per render so the departure window follows the clock, not the first paint.
   const now = new Date();
-  const { issues } = checkForm(
-    now,
-    origin,
-    destination,
-    departureText,
-    loadText,
-    intervalMi,
-  );
+  const check = (interval: IntervalMi, at = new Date()) =>
+    checkForm(at, origin, destination, departureText, loadText, interval);
+  const { issues } = check(intervalMi, now);
   // With a trip on screen the pressed spacing is that trip's, never the pending choice.
   const pressedIntervalMi = planIntervalMi ?? intervalMi;
   const showMessage = (field: FieldKey) => submitAttempted || touched[field];
@@ -98,14 +76,7 @@ export default function TripForm({
       return;
     }
     setSubmitAttempted(true);
-    const submitted = checkForm(
-      new Date(),
-      origin,
-      destination,
-      departureText,
-      loadText,
-      intervalMi,
-    );
+    const submitted = check(intervalMi);
     if (submitted.request !== null) {
       onSubmit(submitted.request);
       return;
@@ -123,14 +94,7 @@ export default function TripForm({
       onCancel();
       return;
     }
-    const nextCheck = checkForm(
-      new Date(),
-      origin,
-      destination,
-      departureText,
-      loadText,
-      next,
-    );
+    const nextCheck = check(next);
     if (nextCheck.request === null) {
       // The trip on screen keeps its spacing, so explain why nothing was sent.
       setSubmitAttempted(true);
@@ -174,9 +138,7 @@ export default function TripForm({
       />
 
       <div className="field">
-        <label htmlFor="departure-input">
-          Leaving
-        </label>
+        <label htmlFor="departure-input">Leaving</label>
         <input
           id="departure-input"
           data-testid="departure-input"
@@ -197,7 +159,13 @@ export default function TripForm({
           }}
         />
         {departureIssue !== undefined && (
-          <FieldError id="departure-input-error" message={departureIssue} />
+          <p
+            className="field-error"
+            id="departure-input-error"
+            data-testid="departure-input-error"
+          >
+            {departureIssue}
+          </p>
         )}
       </div>
 
@@ -210,9 +178,8 @@ export default function TripForm({
               data-testid="load-input"
               className="text-input text-input-suffix"
               type="number"
-              // Arrow keys align their steps to `min`. A floor of 1 lb would step
-              // 20,000 to 20,001 and 19,001; 0 keeps round thousands, and checkForm
-              // holds the 1 lb floor the server enforces.
+              // Step from 0 so arrow keys keep round thousands; checkForm holds
+              // the 1 lb floor the server enforces.
               min={0}
               max={MAX_LOAD_LB}
               step={1000}
@@ -234,7 +201,13 @@ export default function TripForm({
             </span>
           </div>
           {loadIssue !== undefined && (
-            <FieldError id="load-input-error" message={loadIssue} />
+            <p
+              className="field-error"
+              id="load-input-error"
+              data-testid="load-input-error"
+            >
+              {loadIssue}
+            </p>
           )}
         </div>
 

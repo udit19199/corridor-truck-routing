@@ -144,19 +144,16 @@ function RouteMap({
       (feature) =>
         feature.layer.id === "cp-selected" || feature.layer.id === "cp-other",
     );
-    if (checkpointFeature !== undefined) {
-      const routeId = checkpointFeature.properties?.routeId;
-      const index = checkpointFeature.properties?.checkpointIndex;
-      if (typeof routeId === "string" && typeof index === "number") {
-        const currentPlan = planRef.current;
-        const checkpoint = currentPlan?.routes
-          .find((route) => route.id === routeId)
-          ?.checkpoints[index];
-        if (checkpoint !== undefined) {
-          onSelectRouteRef.current(routeId);
-          onPopupRef.current({ routeId, checkpoint });
-          return;
-        }
+    const checkpointRouteId = checkpointFeature?.properties?.routeId;
+    const index = checkpointFeature?.properties?.checkpointIndex;
+    if (typeof checkpointRouteId === "string" && typeof index === "number") {
+      const checkpoint = planRef.current?.routes
+        .find((route) => route.id === checkpointRouteId)
+        ?.checkpoints[index];
+      if (checkpoint !== undefined) {
+        onSelectRouteRef.current(checkpointRouteId);
+        onPopupRef.current({ routeId: checkpointRouteId, checkpoint });
+        return;
       }
     }
 
@@ -174,23 +171,22 @@ function RouteMap({
     onPopupRef.current(null);
   }, []);
 
-  const handleMouseMove = useCallback((event: MapLayerMouseEvent) => {
-    if (event.originalEvent.buttons !== 0) {
-      return; // Leave the drag cursor alone while a button is held.
-    }
-    const map = mapRef.current?.getMap();
-    if (map === undefined) {
-      return;
-    }
-    map.getCanvas().style.cursor = (event.features?.length ?? 0) > 0 ? "pointer" : "";
-  }, []);
-
-  const handleMouseLeave = useCallback(() => {
+  const setCursor = useCallback((cursor: string) => {
     const map = mapRef.current?.getMap();
     if (map !== undefined) {
-      map.getCanvas().style.cursor = "";
+      map.getCanvas().style.cursor = cursor;
     }
   }, []);
+
+  const handleMouseMove = useCallback(
+    (event: MapLayerMouseEvent) => {
+      if (event.originalEvent.buttons !== 0) {
+        return; // Leave the drag cursor alone while a button is held.
+      }
+      setCursor((event.features?.length ?? 0) > 0 ? "pointer" : "");
+    },
+    [setCursor],
+  );
 
   const setMapRef = useCallback(
     (instance: MapRef | null) => {
@@ -317,7 +313,7 @@ function RouteMap({
         onLoad={handleLoad}
         onClick={handleMapClick}
         onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeave}
+        onMouseLeave={() => setCursor("")}
         onError={(event) => {
           if (loadedRef.current) {
             return;

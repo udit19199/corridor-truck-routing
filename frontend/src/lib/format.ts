@@ -69,7 +69,7 @@ export function formatDuration(seconds: number): string {
   if (hours === 0) {
     return `${minutes} min`;
   }
-  return `${hours} h ${String(minutes).padStart(2, "0")} min`;
+  return `${hours} h ${pad(minutes)} min`;
 }
 
 export function formatDistance(miles: number): string {

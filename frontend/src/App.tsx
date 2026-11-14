@@ -65,7 +65,7 @@ interface ShownPlan {
   plan: PlanResponse;
   request: PlanRequest;
   selectedId: string;
-  /** The checkpoint whose popup is open. Cleared by a new plan, a route click or closing the popup. */
+  /** The checkpoint whose popup is open. */
   focus: PopupState | null;
   /** Bumped for every plan, so the slider resets. */
   version: number;
@@ -85,16 +85,6 @@ function plainReason(plan: PlanResponse): string {
     : `${safest} Also the fastest.`;
 }
 
-function PlanSummary({ shown }: { shown: ShownPlan }) {
-  const { plan, request } = shown;
-  return (
-    <p className="plan-summary" data-testid="plan-summary">
-      {request.origin.label} to {request.destination.label},{" "}
-      {formatLoad(plan.load_lb)}, leaving {formatClock(plan.departure)}
-    </p>
-  );
-}
-
 export default function App() {
   const [shown, setShown] = useState<ShownPlan | null>(null);
   const mapApiRef = useRef<MapApi | null>(null);
@@ -103,8 +93,7 @@ export default function App() {
   const pendingFocusRef = useRef<PopupState | null>(null);
 
   const handlePlan = useCallback((plan: PlanResponse, request: PlanRequest) => {
-    // The new plan starts at hour 0: the slider remounts there, and the map reads
-    // this ref, so reset it before either can paint.
+    // Reset before the new plan can paint: the slider reads this ref, and remounts.
     hourRef.current = 0;
     pendingFocusRef.current = null;
     setShown((previous) => ({
@@ -165,7 +154,6 @@ export default function App() {
           block: "start",
         });
       }
-      // The row and the popup show now; the map flies there now or once it loads.
       const focus = { routeId: selectedRoute.id, checkpoint };
       handlePopup(focus);
       if (mapApiRef.current === null) {
@@ -193,9 +181,7 @@ export default function App() {
                 strokeLinecap="round"
               />
             </svg>
-            <div>
-              <h1>Corridor</h1>
-            </div>
+            <h1>Corridor</h1>
           </div>
         </header>
 
@@ -231,7 +217,12 @@ export default function App() {
                   onLoad={runDemo}
                 />
               ) : (
-                <PlanSummary shown={shown} />
+                <p className="plan-summary" data-testid="plan-summary">
+                  {shown.request.origin.label} to{" "}
+                  {shown.request.destination.label},{" "}
+                  {formatLoad(shown.plan.load_lb)}, leaving{" "}
+                  {formatClock(shown.plan.departure)}
+                </p>
               )}
               <div className="verdict">
                 <p className="verdict-pick">

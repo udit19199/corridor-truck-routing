@@ -137,9 +137,9 @@ interface RouteCardsProps {
 }
 
 /**
- * Routes are ranked by No Travel miles first, so if the best route has any, every
- * route does; the same holds for Severe once No Travel is zero. Nothing is hidden:
- * the ranking stays, the warning only says no option is clean.
+ * Routes are ranked No Travel first, then Severe, so if the best route has any,
+ * every route does. Nothing is hidden: the ranking stays, the warning only says
+ * no option is clean.
  */
 function noSafeRouteWarning(plan: PlanResponse): string | null {
   const best = plan.routes.find((route) => route.id === plan.recommended_id);

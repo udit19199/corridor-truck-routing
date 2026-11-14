@@ -135,12 +135,6 @@ button {
   letter-spacing: -0.015em;
 }
 
-.brand p {
-  margin: 0;
-  font-size: 12px;
-  color: var(--ink-3);
-}
-
 .panel-scroll {
   flex: 1;
   min-height: 0;
@@ -360,11 +354,10 @@ input[type="number"] {
   transition: background-color 150ms var(--ease-out), transform 120ms var(--ease-out);
 }
 
-.plan-button:hover:not(:disabled):not([aria-disabled="true"]) {
+.plan-button:hover:not([aria-disabled="true"]) {
   background: var(--accent-hover);
 }
 
-.plan-button:disabled,
 .plan-button[aria-disabled="true"] {
   background: var(--disabled-bg);
   color: var(--disabled-ink);
@@ -380,7 +373,6 @@ input[type="number"] {
   border-top-color: var(--ink-2);
   animation: spin 700ms linear infinite;
 }
-
 
 @keyframes spin {
   to {
@@ -725,7 +717,6 @@ input[type="number"] {
 
 .skeleton-card {
   height: 132px;
-  border-radius: 12px;
 }
 
 @keyframes shimmer {
@@ -753,14 +744,6 @@ input[type="number"] {
   border-top: 1px solid var(--line);
 }
 
-
-.empty h2 {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
 .empty p {
   margin: 0;
   font-size: 12.5px;
@@ -768,9 +751,6 @@ input[type="number"] {
   color: var(--ink-2);
   text-wrap: pretty;
 }
-
-
-
 
 .fine-print {
   margin: -6px 0 0;
@@ -1004,7 +984,6 @@ input[type="number"] {
   flex: none;
   border-radius: 50%;
 }
-
 
 /* ---------- Popup ---------- */
 
@@ -1305,7 +1284,7 @@ input[type="number"] {
 
 /* ---------- Press, entrance and touch ---------- */
 
-.plan-button:active:not(:disabled):not([aria-disabled="true"]),
+.plan-button:active:not([aria-disabled="true"]),
 .secondary-button:active,
 .segmented button:active {
   transform: scale(0.97);

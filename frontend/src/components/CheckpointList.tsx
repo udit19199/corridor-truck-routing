@@ -37,7 +37,6 @@ export default function CheckpointList({
                 data-testid="checkpoint-row"
                 data-level={checkpoint.level}
                 data-eta={checkpoint.eta}
-                data-mile={checkpoint.mile}
                 aria-current={checkpoint.mile === focusedMile ? "true" : undefined}
                 onClick={() => onFocus(checkpoint)}
               >

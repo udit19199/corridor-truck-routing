@@ -15,13 +15,6 @@ export const FIELD_INPUT_IDS = {
 
 export type FieldKey = keyof typeof FIELD_INPUT_IDS;
 
-const FIELD_ORDER: readonly FieldKey[] = [
-  "origin",
-  "destination",
-  "departure",
-  "load",
-];
-
 export type FormIssues = Partial<Record<FieldKey, string>>;
 
 function milesBetween(a: Place, b: Place): number {
@@ -103,16 +96,15 @@ export function firstInvalidField(
   origin: Place | null,
   destination: Place | null,
 ): FieldKey | null {
-  for (const field of FIELD_ORDER) {
-    if (field === "origin" && origin === null) {
-      return field;
-    }
-    if (field === "destination" && destination === null) {
-      return field;
-    }
-    if (issues[field] !== undefined) {
-      return field;
-    }
+  if (origin === null) {
+    return "origin";
   }
-  return null;
+  if (destination === null) {
+    return "destination";
+  }
+  return (
+    (["destination", "departure", "load"] as const).find(
+      (field) => issues[field] !== undefined,
+    ) ?? null
+  );
 }

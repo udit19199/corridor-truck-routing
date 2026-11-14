@@ -18,10 +18,6 @@ interface CheckpointProperties {
   level: Level;
 }
 
-interface TruckProperties {
-  routeId: string;
-}
-
 export interface PlanLayers {
   heat: FeatureCollection<Polygon>;
   routes: FeatureCollection<LineString, RouteProperties>;
@@ -139,11 +135,11 @@ export function buildPlanLayers(plan: PlanResponse): PlanLayers {
 export function truckFeatures(
   plan: PlanResponse,
   hour: number,
-): FeatureCollection<Point, TruckProperties> {
+): FeatureCollection<Point, RouteProperties> {
   const secondsAtHourZero =
     (Date.parse(plan.heatmap.start) - Date.parse(plan.departure)) / 1000;
   const seconds = secondsAtHourZero + hour * 3_600;
-  const features: Feature<Point, TruckProperties>[] = [];
+  const features: Feature<Point, RouteProperties>[] = [];
 
   for (const route of plan.routes) {
     const arrival = route.track[route.track.length - 1]?.[2] ?? route.duration_s;

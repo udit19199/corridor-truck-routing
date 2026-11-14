@@ -1,4 +1,3 @@
-
 export type Level = 0 | 1 | 2 | 3 | 4;
 export type IntervalMi = 10 | 25 | 50;
 
@@ -8,7 +7,7 @@ export interface Place {
   lat: number;
 }
 
-export interface Weather {
+interface Weather {
   wind_mph: number;
   gust_mph: number;
   rain_in_hr: number;
@@ -58,12 +57,7 @@ interface HeatmapCell {
   levels: Level[];
 }
 
-export function maxHeatHour(plan: PlanResponse): number {
-  const levels = plan.heatmap.cells[0]?.levels;
-  return Math.max(0, (levels?.length ?? 1) - 1);
-}
-
-export interface Heatmap {
+interface Heatmap {
   cell_deg: number;
   start: string;
   cells: HeatmapCell[];
@@ -87,6 +81,13 @@ export interface PlanRequest {
   interval_mi: IntervalMi;
   demo?: boolean;
 }
+
+export function maxHeatHour(plan: PlanResponse): number {
+  const levels = plan.heatmap.cells[0]?.levels;
+  return Math.max(0, (levels?.length ?? 1) - 1);
+}
+
+const UNREADABLE = "The planning server sent an unreadable response.";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -123,12 +124,7 @@ function isPlanResponse(value: unknown): value is PlanResponse {
 }
 
 function isErrorPayload(payload: unknown): payload is { error: string } {
-  return (
-    typeof payload === "object" &&
-    payload !== null &&
-    "error" in payload &&
-    typeof payload.error === "string"
-  );
+  return isRecord(payload) && typeof payload.error === "string";
 }
 
 async function errorFrom(response: Response): Promise<Error> {
@@ -143,19 +139,22 @@ async function errorFrom(response: Response): Promise<Error> {
   return new Error(`The planning server returned an error (${response.status}).`);
 }
 
+async function readJson(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    throw new Error(UNREADABLE);
+  }
+}
+
 export async function geocode(query: string, signal?: AbortSignal): Promise<Place[]> {
   const response = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`, { signal });
   if (!response.ok) {
     throw await errorFrom(response);
   }
-  let places: unknown;
-  try {
-    places = await response.json();
-  } catch {
-    throw new Error("The planning server sent an unreadable response.");
-  }
+  const places = await readJson(response);
   if (!Array.isArray(places) || !places.every(isPlace)) {
-    throw new Error("The planning server sent an unreadable response.");
+    throw new Error(UNREADABLE);
   }
   return places;
 }
@@ -170,14 +169,9 @@ export async function planTrip(body: PlanRequest, signal?: AbortSignal): Promise
   if (!response.ok) {
     throw await errorFrom(response);
   }
-  let plan: unknown;
-  try {
-    plan = await response.json();
-  } catch {
-    throw new Error("The planning server sent an unreadable response.");
-  }
+  const plan = await readJson(response);
   if (!isPlanResponse(plan)) {
-    throw new Error("The planning server sent an unreadable response.");
+    throw new Error(UNREADABLE);
   }
   return plan;
 }
