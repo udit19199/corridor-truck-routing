@@ -1,7 +1,5 @@
 name: CI
 
-# Render deploys main only after these checks pass (autoDeployTrigger in render.yaml),
-# so a red run here is what keeps a broken commit off the live app.
 on:
   push:
     branches: [main]
@@ -140,7 +138,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Smoke test
-        # Same image Render runs, started the way Render starts it, on fixture providers.
         run: |
           docker run --detach --name app --publish 8000:8000 \
             --env SECRET_KEY=ci-only --env ALLOWED_HOSTS=localhost \
@@ -149,7 +146,6 @@ jobs:
           curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 2 \
             http://localhost:8000/api/health
           curl --fail --silent --show-error http://localhost:8000/ | grep --quiet '<div id="root">'
-          # The page can load while WhiteNoise still serves no assets; check one hashed bundle.
           asset=$(curl --fail --silent --show-error http://localhost:8000/ \
             | grep --only-matching --max-count=1 '/assets/[^"]*\.js')
           test -n "$asset"

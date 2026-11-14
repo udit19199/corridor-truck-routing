@@ -21,24 +21,21 @@ import {
 } from "maplibre-gl";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import "maplibre-gl/dist/maplibre-gl.css";
-import type { Checkpoint, PlanResponse } from "./api";
-import { MAP_STYLE, NORTH_AMERICA, pruneBasemap, tuneBasemap } from "./basemap";
+import type { Checkpoint, PlanResponse } from "../api";
+import { MAP_STYLE, NORTH_AMERICA, pruneBasemap, tuneBasemap } from "../map/basemap";
 import CheckpointPopup, { type PopupState } from "./CheckpointPopup";
-import { prefersReducedMotion } from "./format";
-import type { MapApi } from "./mapHandoff";
+import { prefersReducedMotion } from "../lib/format";
+import type { MapApi } from "../map/mapHandoff";
 import {
   applyHour,
   applyPlanData,
   applySelection,
   fitToPlan,
   installLayers,
-} from "./mapLayers";
-import { buildPlanLayers, NO_PLAN, type PlanLayers } from "./planGeoJson";
+} from "../map/mapLayers";
+import { buildPlanLayers, NO_PLAN, type PlanLayers } from "../map/planGeoJson";
 import MapUnavailable from "./MapUnavailable";
 
-// MapLibre 6 resolves its worker relative to the module URL, which a bundler
-// rewrites. Vite's ?url import keeps the worker next to the app in dev and build.
-// It lives here, not in main.tsx, so maplibre stays out of the first chunk.
 setWorkerUrl(workerUrl);
 
 const INTERACTIVE_LAYERS = [
@@ -51,12 +48,9 @@ const INTERACTIVE_LAYERS = [
 interface RouteMapProps {
   plan: PlanResponse | null;
   selectedId: string | null;
-  /** The open checkpoint popup; App owns it so the list can mark the same row. */
   popup: PopupState | null;
   onPopup: (popup: PopupState | null) => void;
-  /** The hour the slider shows. The map opens on it after a lazy load. */
   hourRef: MutableRefObject<number>;
-  /** A checkpoint to fly to once the map loads; App clears it when the focus is dropped. */
   pendingFocusRef: MutableRefObject<PopupState | null>;
   onSelectRoute: (routeId: string) => void;
   apiRef: MutableRefObject<MapApi | null>;
@@ -80,23 +74,17 @@ function RouteMap({
     import.meta.env.DEV ||
     new URLSearchParams(window.location.search).has("debug");
 
-  /** Built once per plan: the hour rides on feature state, never on this data. */
   const layers = useMemo<PlanLayers>(
     () => (plan === null ? NO_PLAN : buildPlanLayers(plan)),
     [plan],
   );
 
-  // Event handlers and effects read the latest render through these refs. A layout
-  // effect writes them, so render stays pure and the writes still land before the
-  // passive effects and the map load event read the values.
   const layersRef = useRef<PlanLayers>(layers);
   const planRef = useRef<PlanResponse | null>(plan);
   const selectedRef = useRef<string | null>(selectedId);
   const onSelectRouteRef = useRef(onSelectRoute);
   const onPopupRef = useRef(onPopup);
 
-  // A fast drag can fire more input events than the map draws frames; keep only
-  // the newest hour and apply it once per frame.
   const pendingHourRef = useRef<number | null>(null);
   const hourFrameRef = useRef(0);
 
@@ -124,8 +112,6 @@ function RouteMap({
         return;
       }
       onPopupRef.current({ routeId, checkpoint });
-      // The popup opens upward. On a phone the map is only partly on screen, so
-      // keep the checkpoint low and let the popup clear the panel above it.
       const narrow = window.matchMedia("(max-width: 900px)").matches;
       map.flyTo({
         center: [checkpoint.lon, checkpoint.lat],
@@ -153,7 +139,6 @@ function RouteMap({
           .find((route) => route.id === routeId)
           ?.checkpoints[index];
         if (checkpoint !== undefined) {
-          // The list must mark the same route the popup belongs to.
           onSelectRouteRef.current(routeId);
           onPopupRef.current({ routeId, checkpoint });
           return;
@@ -175,8 +160,6 @@ function RouteMap({
     onPopupRef.current(null);
   }, []);
 
-  // `interactiveLayerIds` already fills `event.features`, so the cursor follows
-  // the layers under the pointer without a state update per mouse move.
   const handleMouseMove = useCallback((event: MapLayerMouseEvent) => {
     if (event.originalEvent.buttons !== 0) {
       return; // Leave the drag cursor alone while a button is held.
@@ -195,8 +178,6 @@ function RouteMap({
     }
   }, []);
 
-  // Exposed when the map object exists, not when its style finishes loading, so
-  // tests can inspect paint properties as soon as the first plan renders.
   const setMapRef = useCallback(
     (instance: MapRef | null) => {
       mapRef.current = instance;
@@ -327,13 +308,10 @@ function RouteMap({
           if (loadedRef.current) {
             return;
           }
-          // MapLibre reports a missing WebGL context as an error event, not a throw.
           if (event.error?.name === "GPUInitializationError") {
             setMapFailed("webgl");
             return;
           }
-          // The plan layers install on style load, so a style that never arrives
-          // means a blank map with no explanation.
           if (event.error instanceof AJAXError && event.error.url === MAP_STYLE) {
             setMapFailed("basemap");
           }

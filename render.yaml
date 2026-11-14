@@ -4,7 +4,6 @@ services:
     runtime: docker
     plan: free
     healthCheckPath: /api/health
-    # Deploy a main commit only after its GitHub Actions checks pass.
     autoDeployTrigger: checksPass
     envVars:
       - key: SECRET_KEY

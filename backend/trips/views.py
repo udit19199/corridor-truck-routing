@@ -105,7 +105,6 @@ def _parse_request(payload: dict[str, object]) -> PlanRequest:
 
     if interval_mi not in (10, 25, 50):
         raise ValueError("Pick a checkpoint interval of 10, 25 or 50 miles.")
-    # Cargo cap: 80,000 lb legal gross minus the 35,000 lb tare added for TomTom.
     if not 1 <= load_lb <= 45_000:
         raise ValueError("Cargo weight must be between 1 and 45,000 lb.")
     if haversine(origin.lon, origin.lat, destination.lon, destination.lat) < 1:
@@ -189,13 +188,11 @@ def _over_limit(request: HttpRequest, scope: str, limit: int) -> bool:
     try:
         return cache.incr(key) > limit
     except ValueError:
-        # The window expired between add and incr; this request starts a new one.
         cache.set(key, 1, RATE_WINDOW_SECONDS)
         return False
 
 
 def _client_address(request: HttpRequest) -> str:
-    """The first X-Forwarded-For entry, or the socket address behind Render's proxy."""
     forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
     return forwarded.split(",")[0].strip() if forwarded else request.META.get("REMOTE_ADDR", "")
 

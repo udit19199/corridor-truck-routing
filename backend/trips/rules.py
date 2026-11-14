@@ -9,8 +9,6 @@ from trips.domain import (
     Weather,
 )
 
-# Rows are (lower bound, level). Equal to a lower bound takes that band;
-# above the band's top edge (no_travel_above) is No Travel.
 WIND_BANDS = (
     (25.0, Level.MODERATE),
     (35.0, Level.HIGH),
@@ -49,7 +47,6 @@ def _snow_level(in_hr: float) -> Level:
     return _band_level(in_hr, SNOW_BANDS, 3.0)
 
 
-# (wind from, wind below, loads above this weight, level). The table's own bands still apply.
 LOAD_RULES = (
     (45.0, 55.0, 30_000, Level.NO_TRAVEL),
     (35.0, 45.0, 40_000, Level.SEVERE),
@@ -88,7 +85,6 @@ def classify(weather: Weather, load_lb: int) -> Assessment:
 
 
 def covered_miles(miles: list[float], total_mi: float) -> list[float]:
-    """Each checkpoint owns half the gap to its neighbours, so the parts sum to the route."""
     covers = []
     for index, mile in enumerate(miles):
         previous = miles[index - 1] if index else mile
@@ -118,12 +114,10 @@ def summarize(checkpoints: list[Checkpoint], distance_mi: float) -> RouteSummary
     )
 
 
-# Level names for the reason, worst first. These three decide the ranking before time does.
 NO_TRAVEL = (Level.NO_TRAVEL, "No Travel")
 SEVERE = (Level.SEVERE, "Severe")
 HIGH = (Level.HIGH, "High")
 RISK_LEVELS = (NO_TRAVEL, SEVERE, HIGH)
-# The two levels the "even the winner" warning names.
 WARNING_LEVELS = (NO_TRAVEL, SEVERE)
 AVERAGE_RISK_KEY = len(RISK_LEVELS)
 TIME_KEY = AVERAGE_RISK_KEY + 1
@@ -131,7 +125,6 @@ TIE_KEY = AVERAGE_RISK_KEY + 2
 
 
 def _rank_key(route: Route) -> tuple[float, ...]:
-    """The brief's order: No Travel, Severe and High miles, then average risk, then time."""
     miles = route.summary.miles_by_level
     return (
         *(miles[level] for level, _label in RISK_LEVELS),
@@ -154,14 +147,12 @@ def _format_duration(seconds: int) -> str:
 
 
 def _with_time_cost(text: str, winner: Route, other: Route) -> str:
-    """Adds the time the winner gives up, so the reason balances risk against time."""
     if winner.duration_s <= other.duration_s:
         return text
     return f"{text}, {_format_duration(winner.duration_s - other.duration_s)} slower"
 
 
 def _why_better(winner: Route, other: Route) -> tuple[int, str]:
-    """The most decisive key where the winner beats the other route, and the words for it."""
     ours, theirs = winner.summary.miles_by_level, other.summary.miles_by_level
     for order, (level, label) in enumerate(RISK_LEVELS):
         if ours[level] < theirs[level]:
@@ -187,7 +178,6 @@ def _why_better(winner: Route, other: Route) -> tuple[int, str]:
 
 
 def _warning(winner: Route, *, single: bool = False) -> str:
-    """Warns when the winner itself still carries No Travel or Severe miles."""
     miles = winner.summary.miles_by_level
     parts = [
         f"{_format_miles(miles[level])} {label} miles"
@@ -202,7 +192,6 @@ def _warning(winner: Route, *, single: bool = False) -> str:
 
 
 def rank(routes: list[Route]) -> tuple[list[Route], str]:
-    # sorted() is stable, so routes that tie on every key keep the provider's order.
     ranked = sorted(routes, key=_rank_key)
     if not ranked:
         return ranked, "No routes were found."

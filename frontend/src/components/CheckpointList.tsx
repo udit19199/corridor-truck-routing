@@ -1,6 +1,6 @@
-import type { Checkpoint, IntervalMi, Route } from "./api";
-import { formatClock, formatMiles } from "./format";
-import { levelInfo } from "./levels";
+import type { Checkpoint, IntervalMi, Route } from "../api";
+import { formatClock, formatMiles } from "../lib/format";
+import { levelInfo } from "../lib/levels";
 
 interface CheckpointListProps {
   route: Route;

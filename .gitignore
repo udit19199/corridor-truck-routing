@@ -1,11 +1,37 @@
-brief/
-.env
-.venv/
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+.venv/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+*.sqlite3
+staticfiles/
+
+# Node
 node_modules/
 frontend/dist/
-.DS_Store
+*.tsbuildinfo
+.vite/
+
+# Tests
 test-results/
 playwright-report/
-.ruff_cache/
+blob-report/
+coverage/
+htmlcov/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.log
+
+# Assignment brief, kept local
+brief/

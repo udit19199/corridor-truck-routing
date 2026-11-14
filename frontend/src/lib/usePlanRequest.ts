@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { planTrip, type PlanRequest, type PlanResponse } from "./api";
+import { planTrip, type PlanRequest, type PlanResponse } from "../api";
 
 const PLAN_TIMEOUT_MS = 30_000;
 
@@ -26,10 +26,6 @@ function errorMessage(error: unknown): string {
   return "The trip could not be planned.";
 }
 
-/**
- * One plan request at a time, with a 30 second timeout. A newer request or `cancel`
- * aborts the one in flight, and an aborted request never reports.
- */
 export function usePlanRequest(
   onPlan: (plan: PlanResponse, request: PlanRequest) => void,
 ) {
@@ -49,7 +45,6 @@ export function usePlanRequest(
       ]);
       planTrip(nextRequest, signal)
         .then((plan) => {
-          // A superseded or timed out request must not replace what is on screen.
           if (controller.signal.aborted) {
             return;
           }

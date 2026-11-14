@@ -1,4 +1,4 @@
-import type { IntervalMi, Place, PlanRequest } from "./api";
+import type { IntervalMi, Place, PlanRequest } from "../api";
 import { localDateTimeToIso } from "./format";
 
 const MIN_LOAD_LB = 1;
@@ -24,7 +24,6 @@ const FIELD_ORDER: readonly FieldKey[] = [
 
 export type FormIssues = Partial<Record<FieldKey, string>>;
 
-/** Straight-line miles, the same distance the server checks before it plans. */
 function milesBetween(a: Place, b: Place): number {
   const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
   const earthRadiusMi = 3958.7613;
@@ -38,10 +37,6 @@ function milesBetween(a: Place, b: Place): number {
   return 2 * earthRadiusMi * Math.asin(Math.sqrt(h));
 }
 
-/**
- * Every field problem, and the request when there is none. `now` is passed in so the
- * departure window is measured against the moment of the check, not the first render.
- */
 export function checkForm(
   now: Date,
   origin: Place | null,

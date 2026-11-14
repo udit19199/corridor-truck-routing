@@ -19,6 +19,5 @@ urlpatterns = [
     path("api/geocode", views.geocode),
     path("api/plan", views.plan),
     re_path(r"^api(?:/.*)?$", views.api_not_found),
-    # Missing assets (paths with an extension) 404, so a stale page never loads HTML as JS.
     re_path(r"^(?!api(?:/|$))(?!.*\.[A-Za-z0-9]+$).*$", index),
 ]

@@ -1,6 +1,6 @@
-import { DEMO_LOADS, type DemoLoad } from "./demo";
-import { formatLoad } from "./format";
-import { LEVELS } from "./levels";
+import { DEMO_LOADS, type DemoLoad } from "../lib/demo";
+import { formatLoad } from "../lib/format";
+import { LEVELS } from "../lib/levels";
 
 export function RiskLegend() {
   return (

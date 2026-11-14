@@ -2,10 +2,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import IntEnum
 
-# lon, lat, seconds after departure
 TrackPoint = tuple[float, float, int]
 Cell = tuple[float, float]
-# one entry per Level, in Level order
 MilesByLevel = tuple[float, float, float, float, float]
 
 
@@ -41,8 +39,6 @@ class Levels:
 
 @dataclass(frozen=True)
 class Assessment:
-    """The level of each weather condition, the worst of them, and why it is the worst."""
-
     levels: Levels
     level: Level
     cause: str
@@ -50,8 +46,6 @@ class Assessment:
 
 @dataclass(frozen=True)
 class RouteOption:
-    """A raw route from a provider, before checkpoints and scoring."""
-
     name: str
     duration_s: int
     track: list[TrackPoint]

@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
-import type { IntervalMi, Place, PlanRequest } from "./api";
-import { dateTimeInputValue, nextHourInputValue } from "./format";
+import type { IntervalMi, Place, PlanRequest } from "../api";
+import { dateTimeInputValue, nextHourInputValue } from "../lib/format";
 import PlacePicker, { leavesToFormButton } from "./PlacePicker";
 import {
   EARLIEST_DEPARTURE_MS,
@@ -11,7 +11,7 @@ import {
   firstInvalidField,
   type FieldKey,
   type FormIssues,
-} from "./tripFormCheck";
+} from "../lib/tripFormCheck";
 
 const INTERVAL_CHOICES = [10, 25, 50] as const;
 const DEFAULT_LOAD_LB = "20000";

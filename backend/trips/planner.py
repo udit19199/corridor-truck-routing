@@ -25,12 +25,8 @@ from trips.providers import NoRouteError, Providers
 from trips.rules import classify, covered_miles, rank, summarize
 
 HEATMAP_HOURS = 49
-# Open-Meteo serves 600 locations a minute. A live Dallas to Chicago plan needs 366 cells at
-# 0.25 deg, so at most one cold plan a minute would fit; at 0.5 deg it needs 136, about four.
 MAX_WEATHER_CELLS = 250
-# Finest grid first: a coarser grid makes the heatmap blocky, so use one only when it has to fit.
 CELL_SIZES = (0.25, 0.5, 1.0)
-# A destination closer than this to the last interval checkpoint replaces that checkpoint.
 MIN_CHECKPOINT_GAP_MI = 1.0
 
 
@@ -154,15 +150,12 @@ def plan_trip(request: PlanRequest, providers: Providers) -> Plan:
 
 
 def forecast_index(when: datetime, start_hour: datetime) -> int:
-    """The forecast hour nearest this time. A time exactly halfway goes to the later hour."""
     return floor((when - start_hour).total_seconds() / 3600 + 0.5)
 
 
 def _checkpoint_miles(total_mi: float, interval_mi: int) -> list[float]:
     miles = [0.0]
     mile = float(interval_mi)
-    # A checkpoint exactly MIN_CHECKPOINT_GAP_MI from the destination is kept, so the
-    # destination never absorbs a whole interval of weather.
     while mile <= total_mi - MIN_CHECKPOINT_GAP_MI:
         miles.append(mile)
         mile += interval_mi
@@ -173,19 +166,16 @@ def _checkpoint_miles(total_mi: float, interval_mi: int) -> list[float]:
 def _weather_cells(
     tracks: list[list[TrackPoint]], checkpoint_points: list[TrackPoint]
 ) -> tuple[float, list[Cell]]:
-    """The cells to fetch weather for, and the finest grid that fits MAX_WEATHER_CELLS."""
     for candidate in CELL_SIZES:
         cells = _cells_on_grid(tracks, checkpoint_points, candidate)
         if len(cells) <= MAX_WEATHER_CELLS:
             return candidate, cells
-    # If even the coarsest grid is too large, keep it; the provider reports its rate limit.
     return CELL_SIZES[-1], cells
 
 
 def _cells_on_grid(
     tracks: list[list[TrackPoint]], checkpoint_points: list[TrackPoint], cell_deg: float
 ) -> list[Cell]:
-    """Corridor cells, plus any checkpoint cell the corridor left out."""
     cells = set(corridor_cells(tracks, cell_deg))
     missing = {cell_of(lon, lat, cell_deg) for lon, lat, _seconds in checkpoint_points} - cells
     cells |= missing
@@ -194,7 +184,6 @@ def _cells_on_grid(
 
 def _weather_at_hour(hourly: list[Weather], index: int) -> Weather:
     raw = hourly[min(max(index, 0), len(hourly) - 1)]
-    # Classify the rounded numbers the user sees, so "35.0 mph" is never scored as Moderate.
     return Weather(
         wind_mph=round(raw.wind_mph, 1),
         gust_mph=round(raw.gust_mph, 1),

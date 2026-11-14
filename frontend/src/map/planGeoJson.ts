@@ -1,7 +1,3 @@
-/**
- * Plan data as GeoJSON for the map sources. Pure functions over the API payload,
- * so the layer installer and the component stay free of geometry.
- */
 import type {
   Feature,
   FeatureCollection,
@@ -10,7 +6,7 @@ import type {
   Polygon,
   Position,
 } from "geojson";
-import type { Level, PlanResponse, TrackPoint } from "./api";
+import type { Level, PlanResponse, TrackPoint } from "../api";
 
 interface RouteProperties {
   routeId: string;
@@ -27,17 +23,11 @@ interface TruckProperties {
 }
 
 export interface PlanLayers {
-  /**
-   * Heat cell polygons only. A cell's feature id is its index in
-   * `plan.heatmap.cells`, and the hour rides on feature state, so the slider
-   * never rewrites this data or a paint property.
-   */
   heat: FeatureCollection<Polygon>;
   routes: FeatureCollection<LineString, RouteProperties>;
   checkpoints: FeatureCollection<Point, CheckpointProperties>;
 }
 
-/** The map sources' contents when no plan is on screen. */
 export const NO_PLAN: PlanLayers = {
   heat: { type: "FeatureCollection", features: [] },
   routes: { type: "FeatureCollection", features: [] },
@@ -49,14 +39,12 @@ interface LonLat {
   lat: number;
 }
 
-/** Position at a time, interpolated between the two nearest track points. */
 function pointAt(track: TrackPoint[], seconds: number): LonLat | null {
   const first = track[0];
   const last = track[track.length - 1];
   if (first === undefined || last === undefined) {
     return null;
   }
-  // Before departure, seconds is negative and the truck waits at the origin.
   if (seconds <= first[2]) {
     return { lon: first[0], lat: first[1] };
   }
@@ -148,11 +136,6 @@ export function buildPlanLayers(plan: PlanResponse): PlanLayers {
   };
 }
 
-/**
- * One truck per route at the hour's position. Hour 0 is `heatmap.start`, which
- * may sit before the departure, so the first hours can show a truck at the origin.
- * A route that has arrived has no truck.
- */
 export function truckFeatures(
   plan: PlanResponse,
   hour: number,

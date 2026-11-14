@@ -1,17 +1,8 @@
-/**
- * Basemap choice and tuning: the OpenFreeMap dark style, the layers a dispatcher
- * never needs, and the paint nudges that make its labels readable.
- */
 import type { Map as MapLibreMap } from "maplibre-gl";
 
 export const MAP_STYLE = "https://tiles.openfreemap.org/styles/dark";
 export const NORTH_AMERICA: [number, number, number, number] = [-170, 5, -45, 78];
 
-/**
- * Building footprints, landuse detail, minor roads and their labels, rail,
- * airfields, piers. Place names, major roads, water and boundaries stay.
- * Removing them cuts per-frame draw work.
- */
 const BASEMAP_DROP = new Set([
   "building",
   "landuse_residential",
@@ -48,10 +39,6 @@ export function pruneBasemap(map: MapLibreMap): void {
   }
 }
 
-/**
- * The stock dark basemap paints its labels and boundaries at about 3:1 against
- * its own background, which is too dim to scan at a glance. Lift them once.
- */
 const BASEMAP_TEXT: ReadonlyArray<readonly [string, string]> = [
   ["place_city_large", "#c9c9ce"],
   ["place_city", "#c9c9ce"],

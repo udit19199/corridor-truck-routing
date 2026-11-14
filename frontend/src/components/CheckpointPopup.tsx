@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
-import type { Checkpoint, Level } from "./api";
-import { formatClockDetailed, formatDistance, formatMiles } from "./format";
-import { levelInfo } from "./levels";
+import type { Checkpoint, Level } from "../api";
+import { formatClockDetailed, formatDistance, formatMiles } from "../lib/format";
+import { levelInfo } from "../lib/levels";
 
 const CONDITION_LABELS = { wind: "Wind", rain: "Rain", snow: "Snow" } as const;
 
@@ -12,10 +12,6 @@ export interface PopupState {
   checkpoint: Checkpoint;
 }
 
-/**
- * The condition that set the level, in the backend's tie order: wind, then snow,
- * then rain. A tie must mark one row, the one `cause` names.
- */
 function settingCondition(checkpoint: Checkpoint): Condition | null {
   if (checkpoint.level === 0) {
     return null;

@@ -1,12 +1,5 @@
-import type { PlanRequest } from "./api";
+import type { PlanRequest } from "../api";
 
-/**
- * The storm demo: the server's recorded Dallas to Chicago routes under its scripted storm
- * (DESIGN.md 5.5). Live weather is often calm everywhere, which hides the risk and load
- * rules; the demo shows them on any day.
- */
-
-/** 40,000 lb and under keeps 35-44 mph wind at High; above it, the load rule makes it Severe. */
 export const DEMO_LOADS = [20_000, 45_000] as const;
 export type DemoLoad = (typeof DEMO_LOADS)[number];
 

@@ -1,13 +1,4 @@
 # ruff: noqa: E402
-"""Sanity check for fixture mode.
-
-Run with both providers on the fixture:
-  ROUTING_PROVIDER=fixture WEATHER_PROVIDER=fixture uv run python scripts/check_fixture.py
-
-Run against live Open-Meteo weather (assertions may fail, so skip them):
-  ROUTING_PROVIDER=fixture uv run python scripts/check_fixture.py --no-assert
-"""
-
 import argparse
 import os
 import sys
@@ -29,8 +20,6 @@ from trips.providers import get_providers
 
 ORIGIN = Place("Dallas, TX", -96.797, 32.7767)
 DESTINATION = Place("Chicago, IL", -87.6298, 41.8781)
-# Half past the hour: DESIGN.md 5.4.3 says checkpoint and heatmap levels agree on a
-# non-whole-hour departure.
 DEPARTURE = datetime(2026, 11, 13, 12, 30, tzinfo=UTC)
 
 
@@ -147,7 +136,6 @@ def _check_covered_miles(routes: list[Route]) -> list[str]:
 
 
 def _check_checkpoint_levels(plan: Plan) -> list[str]:
-    """A checkpoint must show the level of its cell at the slider hour nearest its ETA."""
     cell_levels = {(cell.lon, cell.lat): cell.levels for cell in plan.heatmap.cells}
     failures = []
     for route in plan.routes:

@@ -13,17 +13,17 @@ import {
   type PlanRequest,
   type PlanResponse,
 } from "./api";
-import CheckpointList from "./CheckpointList";
-import { demoRequest, type DemoLoad } from "./demo";
+import CheckpointList from "./components/CheckpointList";
+import { demoRequest, type DemoLoad } from "./lib/demo";
 import {
   formatClock,
   formatLoad,
   prefersReducedMotion,
   timeZoneAbbreviation,
-} from "./format";
-import HourSlider from "./HourSlider";
-import type { MapApi } from "./mapHandoff";
-import MapUnavailable from "./MapUnavailable";
+} from "./lib/format";
+import HourSlider from "./components/HourSlider";
+import type { MapApi } from "./map/mapHandoff";
+import MapUnavailable from "./components/MapUnavailable";
 import {
   DemoBanner,
   EmptyState,
@@ -31,14 +31,14 @@ import {
   LoadingState,
   RefreshState,
   RiskLegend,
-} from "./PanelStates";
-import type { PopupState } from "./CheckpointPopup";
-import RouteCards from "./RouteCards";
-import TripForm from "./TripForm";
-import { usePlanRequest } from "./usePlanRequest";
+} from "./components/PanelStates";
+import type { PopupState } from "./components/CheckpointPopup";
+import RouteCards from "./components/RouteCards";
+import TripForm from "./components/TripForm";
+import { usePlanRequest } from "./lib/usePlanRequest";
 
 // The map pulls in MapLibre; loading it separately lets the form paint first.
-const RouteMap = lazy(() => import("./RouteMap"));
+const RouteMap = lazy(() => import("./components/RouteMap"));
 
 // A failed map chunk or missing WebGL must not blank the form and route cards.
 class MapErrorBoundary extends Component<

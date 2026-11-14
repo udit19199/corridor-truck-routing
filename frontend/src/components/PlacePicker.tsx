@@ -5,7 +5,7 @@ import {
   type KeyboardEvent,
   type MouseEvent,
 } from "react";
-import { geocode, type Place } from "./api";
+import { geocode, type Place } from "../api";
 
 type SearchState =
   | { status: "idle" | "searching" | "failed" }

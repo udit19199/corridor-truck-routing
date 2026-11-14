@@ -1,8 +1,3 @@
-/**
- * The plan's map layers: install them once, then update data, selection and hour.
- * The forecast hour is feature state on the heat cells, so a slider move changes
- * no paint property and MapLibre never reloads the heat source.
- */
 import {
   LngLatBounds,
   type ExpressionSpecification,
@@ -10,9 +5,9 @@ import {
   type Map as MapLibreMap,
 } from "maplibre-gl";
 import type { FeatureCollection } from "geojson";
-import type { PlanResponse } from "./api";
-import { prefersReducedMotion } from "./format";
-import { LEVELS } from "./levels";
+import type { PlanResponse } from "../api";
+import { prefersReducedMotion } from "../lib/format";
+import { LEVELS } from "../lib/levels";
 import { truckFeatures, type PlanLayers } from "./planGeoJson";
 
 const ACCENT = "#f4f4f5";
@@ -27,7 +22,6 @@ const TRUCKS_SOURCE = "trucks";
 
 const EMPTY_COLLECTION: FeatureCollection = { type: "FeatureCollection", features: [] };
 
-/** One match expression for every level paint, so colours never drift from the table. */
 function levelMatch(input: ExpressionSpecification): ExpressionSpecification {
   return [
     "match",
@@ -42,18 +36,14 @@ function levelMatch(input: ExpressionSpecification): ExpressionSpecification {
     LEVELS[3].color,
     4,
     LEVELS[4].color,
-    // No level for this hour, or an unknown level, paints nothing. It must not
-    // fall back to Low green.
     "rgba(0, 0, 0, 0)",
   ];
 }
 
-/** The heat hour lives in feature state, so this paint value never changes per move. */
 const HEAT_COLOR = levelMatch(["feature-state", "level"]);
 const CHECKPOINT_COLOR = levelMatch(["get", "level"]);
 
 export function installLayers(map: MapLibreMap): void {
-  // Heat and route lines sit under the basemap labels so city names stay readable.
   const firstLabel = map
     .getStyle()
     .layers.find((layer) => layer.type === "symbol")?.id;
@@ -131,8 +121,6 @@ export function installLayers(map: MapLibreMap): void {
     },
   });
 
-  // Three trucks at most: the hour rewrites these points instead of filtering
-  // one point per route per hour out of a large source.
   map.addSource(TRUCKS_SOURCE, { type: "geojson", data: EMPTY_COLLECTION });
   map.addLayer({
     id: "trucks-other",
@@ -173,14 +161,12 @@ export function installLayers(map: MapLibreMap): void {
   });
 }
 
-/** Route lines, checkpoint circles and heat cells for a plan. Trucks follow the hour. */
 export function applyPlanData(map: MapLibreMap, layers: PlanLayers): void {
   map.getSource<GeoJSONSource>(HEAT_SOURCE)?.setData(layers.heat);
   map.getSource<GeoJSONSource>(ROUTES_SOURCE)?.setData(layers.routes);
   map.getSource<GeoJSONSource>(CHECKPOINTS_SOURCE)?.setData(layers.checkpoints);
 }
 
-/** Which route is highlighted. `null` leaves every route in the idle style. */
 export function applySelection(map: MapLibreMap, routeId: string | null): void {
   const id = routeId ?? "";
   map.setFilter("routes-selected", ["==", ["get", "routeId"], id]);
@@ -190,10 +176,6 @@ export function applySelection(map: MapLibreMap, routeId: string | null): void {
   map.setFilter("trucks-other", ["!=", ["get", "routeId"], id]);
 }
 
-/**
- * The forecast hour. One feature-state value per heat cell repaints the map and
- * leaves the style alone; the trucks move by rewriting one tiny source.
- */
 export function applyHour(
   map: MapLibreMap,
   plan: PlanResponse | null,

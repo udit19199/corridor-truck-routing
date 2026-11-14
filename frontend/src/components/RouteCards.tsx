@@ -1,16 +1,16 @@
-import type { Level, PlanResponse, Route, RouteSummary } from "./api";
+import type { Level, PlanResponse, Route, RouteSummary } from "../api";
 import {
   formatClock,
   formatDistance,
   formatDuration,
   formatMiles,
   formatRisk,
-} from "./format";
+} from "../lib/format";
 import {
   levelInfo,
   NO_TRAVEL_LEVEL,
   SEVERE_LEVEL,
-} from "./levels";
+} from "../lib/levels";
 
 const ALL_LEVELS = [0, 1, 2, 3, 4] as const;
 /** The miles the ranking compares first: No Travel, then Severe, then High. */

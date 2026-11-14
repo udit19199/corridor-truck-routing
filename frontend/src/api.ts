@@ -1,7 +1,3 @@
-/**
- * The single copy of the API contract from DESIGN.md section 5.3.
- * The Django API is the contract owner; these types mirror it.
- */
 
 export type Level = 0 | 1 | 2 | 3 | 4;
 export type IntervalMi = 10 | 25 | 50;
@@ -37,11 +33,9 @@ export interface Checkpoint {
   cause: string;
 }
 
-/** `[lon, lat, seconds after departure]` */
 export type TrackPoint = [lon: number, lat: number, seconds: number];
 
 export interface RouteSummary {
-  /** Index is the Level: 0 Low, 1 Moderate, 2 High, 3 Severe, 4 No Travel. */
   miles_by_level: [number, number, number, number, number];
   avg_risk: number;
   worst: Level;
@@ -61,11 +55,9 @@ export interface Route {
 interface HeatmapCell {
   lon: number;
   lat: number;
-  /** One level per forecast hour, from hour 0 up. */
   levels: Level[];
 }
 
-/** The last forecast hour the heatmap covers, from the levels a cell carries. */
 export function maxHeatHour(plan: PlanResponse): number {
   const levels = plan.heatmap.cells[0]?.levels;
   return Math.max(0, (levels?.length ?? 1) - 1);
@@ -83,7 +75,6 @@ export interface PlanResponse {
   interval_mi: IntervalMi;
   recommended_id: string;
   reason: string;
-  /** In ranking order, recommended first. */
   routes: Route[];
   heatmap: Heatmap;
 }
@@ -94,7 +85,6 @@ export interface PlanRequest {
   departure: string;
   load_lb: number;
   interval_mi: IntervalMi;
-  /** Plan on the recorded routes and scripted storm instead of live providers. */
   demo?: boolean;
 }
 
@@ -111,7 +101,6 @@ function isPlace(value: unknown): value is Place {
   );
 }
 
-/** The fields the UI reads; anything missing would blank the page during render. */
 function isPlanResponse(value: unknown): value is PlanResponse {
   if (!isRecord(value) || !Array.isArray(value.routes) || value.routes.length === 0) {
     return false;
@@ -147,7 +136,6 @@ async function errorFrom(response: Response): Promise<Error> {
   try {
     payload = await response.json();
   } catch {
-    // A proxy or crash can return HTML; the status still tells the user something.
   }
   if (isErrorPayload(payload)) {
     return new Error(payload.error);

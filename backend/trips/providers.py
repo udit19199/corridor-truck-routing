@@ -22,7 +22,6 @@ from trips.geometry import haversine
 
 logger = logging.getLogger(__name__)
 
-# Raw JSON from outside services. It is `object` until the shape checks below narrow it.
 Json = object
 
 
@@ -46,10 +45,7 @@ TOMTOM_ROUTE_URL = "https://api.tomtom.com/routing/1/calculateRoute/{origin}:{de
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
 WEATHER_CACHE_SECONDS = 30 * 60
 OPENMETEO_FIELDS = ("wind_speed_10m", "wind_gusts_10m", "rain", "showers", "snowfall")
-# A null reading may borrow from an hour at most this far away; further out it is a real gap.
 MAX_GAP_FILL_HOURS = 3
-# TomTom wants gross vehicle weight; the form asks for cargo.
-# 35,000 lb is a typical empty tractor-trailer.
 TRUCK_TARE_LB = 35_000
 NO_ROUTE_MESSAGE = "No truck route was found between these places."
 FIXTURE_CITIES = [
@@ -65,12 +61,10 @@ FIXTURE_CITIES = [
 
 
 class ProviderError(Exception):
-    """An outside service failed or returned something unusable."""
+    pass
 
 
 class NoRouteError(Exception):
-    """The routing service knows no route between the two places."""
-
     def __init__(self, message: str = NO_ROUTE_MESSAGE) -> None:
         super().__init__(message)
 
@@ -83,9 +77,6 @@ class Providers:
         [list[Cell], datetime, datetime],
         dict[Cell, list[Weather]],
     ]
-
-
-# -- Fixture routing and geocoding -------------------------------------------------
 
 
 @cache
@@ -112,11 +103,6 @@ def _fixture_routes_for(
     return list(_fixture_routes())
 
 
-# -- Fixture weather: a fixed storm field that moves with the clock ----------------
-
-
-# Each storm sits at (lon, lat) at the requested start hour and drifts from there,
-# so the field is the same for any date and time.
 @dataclass(frozen=True)
 class Storm:
     lon: float
@@ -130,11 +116,8 @@ class Storm:
 
 
 STORMS = (
-    # Wind over the southern route around hour 8.
     Storm(-91.16, 35.70, 0.12, 0.00, 0.70, 42.0, 0.22, 0.0),
-    # Wide rain field over the central routes around hours 9-13.
     Storm(-94.20, 38.90, 0.08, 0.00, 1.60, 28.0, 0.45, 0.0),
-    # Snow field drifting into the corridor late in the 48 hour window.
     Storm(-99.00, 47.50, 0.28, -0.10, 1.40, 33.0, 0.05, 2.2),
 )
 
@@ -159,9 +142,6 @@ def _fixture_hourly(cells: list[Cell], start: datetime, end: datetime) -> dict[C
         cell: [_fixture_weather_at(cell[0], cell[1], hour) for hour in range(hours)]
         for cell in cells
     }
-
-
-# -- TomTom -----------------------------------------------------------------------
 
 
 def _tomtom_key() -> str:
@@ -202,8 +182,6 @@ def _tomtom_geocode(query: str) -> list[Place]:
     return places
 
 
-# TomTom reports a route it cannot compute as a 400. These mean the points cannot be
-# reached; any other 400 is a bad request from us.
 NO_ROUTE_CODES = frozenset({"MAP_MATCHING_FAILURE", "NO_ROUTE_FOUND", "CANNOT_RESTORE_BASEROUTE"})
 
 
@@ -219,8 +197,6 @@ def _tomtom_says_no_route(body: Json) -> bool:
 def _tomtom_routes(
     origin: Place, destination: Place, departure: datetime, load_lb: int
 ) -> list[RouteOption]:
-    # TomTom rejects a departure in the past, so a departure up to 1 hour ago starts
-    # at the next minute. ETAs still count from the departure the user chose.
     depart_at = max(departure, datetime.now(UTC) + timedelta(minutes=1))
     data = _get_json(
         TOMTOM_ROUTE_URL.format(
@@ -234,15 +210,10 @@ def _tomtom_routes(
             "maxAlternatives": 2,
             "alternativeType": "anyRoute",
             "departAt": depart_at.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            # Live traffic made TomTom drop its alternatives for some departures (Dallas to
-            # Chicago at 09:30Z: 1 route with traffic, 3 without). Historical speeds for the
-            # departure hour still shape the ETAs, and live traffic now says little about a
-            # truck that is still hours from most of its route.
             "traffic": "false",
             "instructionsType": "coded",
         },
         "The TomTom routing service",
-        # A 400 is either "no route for this truck" or our own bad request; the body decides.
         no_route_400=_tomtom_says_no_route,
     )
     options = []
@@ -272,7 +243,6 @@ def _tomtom_routes(
             )
         )
     if not options:
-        # Routes that arrived but could not be read are a provider problem, not "no route".
         if routes:
             raise ProviderError("The TomTom routing service returned an unexpected response.")
         raise NoRouteError()
@@ -280,7 +250,6 @@ def _tomtom_routes(
 
 
 def _roads_by_distance(route: dict[str, Json]) -> list[str]:
-    """Road numbers ranked by the distance driven on them, from TomTom's guidance."""
     guidance = _dict(route.get("guidance"))
     instructions = [item for item in _list(guidance.get("instructions")) if isinstance(item, dict)]
     metres: dict[str, float] = {}
@@ -295,7 +264,6 @@ def _roads_by_distance(route: dict[str, Json]) -> list[str]:
         for number in _list(instruction.get("roadNumbers")):
             metres[str(number)] = metres.get(str(number), 0.0) + stretch_m
     if not any(metres.values()):
-        # Guidance without usable offsets: fall back to counting instructions.
         counts: Counter[str] = Counter(
             str(number)
             for instruction in instructions
@@ -308,8 +276,6 @@ def _roads_by_distance(route: dict[str, Json]) -> list[str]:
 def _route_name(roads: list[str], taken_names: set[str]) -> str:
     if not roads:
         return "Unnamed roads"
-    # Two roads are the usual name. Add the next road when another route already
-    # uses the same name, so the three cards stay distinct.
     depth = 2
     name = ", ".join(roads[:depth])
     while name in taken_names and depth < len(roads):
@@ -342,8 +308,6 @@ def _tomtom_track(route: dict[str, Json]) -> list[TrackPoint]:
     summary = _dict(route.get("summary"))
     total_time = _float(summary.get("travelTimeInSeconds")) or 0.0
     reported_m = _float(summary.get("lengthInMeters")) or 0.0
-    # Guidance offsets measure TomTom's road length, the track measures the polyline.
-    # Scale one to the other so the destination lands exactly on travelTimeInSeconds.
     scale = length / reported_m if reported_m > 0 else 1.0
     offsets, times = _instruction_marks(_dict(route.get("guidance")), length, total_time, scale)
 
@@ -389,9 +353,6 @@ def _time_at(offsets: list[float], times: list[float], distance: float) -> float
     return times[index] + (times[index + 1] - times[index]) * fraction
 
 
-# -- Open-Meteo -------------------------------------------------------------------
-
-
 def _openmeteo_hourly(
     cells: list[Cell], start: datetime, end: datetime
 ) -> dict[Cell, list[Weather]]:
@@ -407,7 +368,6 @@ def _openmeteo_hourly(
         else:
             missing.append(cell)
 
-    # Batches of 100 locations, four in parallel. Repeat plans find the cache above.
     with ThreadPoolExecutor(max_workers=4) as pool:
         for fetched in pool.map(
             lambda chunk: _fetch_openmeteo(chunk, start, hours), _chunks(missing, 100)
@@ -462,7 +422,6 @@ def _fetch_openmeteo(cells: list[Cell], start: datetime, hours: int) -> dict[Cel
         except ValueError:
             raise ProviderError("The weather service returned an unexpected response.") from None
         if first != start or len(times) != hours:
-            # Padding or shifting the series would cache a value under the wrong hour.
             raise ProviderError("The weather service returned an unexpected response.")
 
         series = {name: _fill_gaps(fields[name]) for name in OPENMETEO_FIELDS}
@@ -493,11 +452,6 @@ def _fetch_openmeteo(cells: list[Cell], start: datetime, hours: int) -> dict[Cel
 
 
 def _fill_gaps(readings: list[Json]) -> list[float] | None:
-    """Replace nulls from the nearest valid hour. None if every hour is null.
-
-    A hole wider than MAX_GAP_FILL_HOURS is an error: a value from a distant hour
-    would be labelled with the wrong time.
-    """
     known = [index for index, reading in enumerate(readings) if _float(reading) is not None]
     if not known:
         return None
@@ -519,9 +473,6 @@ def _fill_gaps(readings: list[Json]) -> list[float] | None:
 
 def _cache_key(cell: Cell, when: datetime) -> str:
     return f"weather:{cell[0]:.2f}:{cell[1]:.2f}:{when.astimezone(UTC):%Y-%m-%dT%H}"
-
-
-# -- Shared -----------------------------------------------------------------------
 
 
 def _get_json(
@@ -548,7 +499,6 @@ def _get_json(
                 body = None
             if no_route_400(body):
                 raise NoRouteError() from None
-        # Logged by service and status only: the URL carries the API key.
         _log_failure(service, status, started)
         if is_route_400:
             raise ProviderError(f"{service} rejected the request.") from None
@@ -564,7 +514,6 @@ def _get_json(
 
 
 def _log_failure(service: str, status: int | None, started: float) -> None:
-    """Log a failure by service and status. The URL carries the API key, so never log it."""
     logger.warning(
         "provider failure service=%s status=%s elapsed_ms=%d",
         service,
@@ -583,11 +532,6 @@ def _chunks[T](items: list[T], size: int) -> Iterator[list[T]]:
 
 
 def demo_providers() -> Providers:
-    """Recorded Dallas to Chicago routes under the scripted storm, for the in-app demo.
-
-    Live weather is often calm everywhere, which hides the risk and load rules. The demo
-    shows them on any day, whatever ROUTING_PROVIDER and WEATHER_PROVIDER say.
-    """
     return Providers(geocode=_fixture_geocode, routes=_fixture_routes_for, hourly=_fixture_hourly)
 
 

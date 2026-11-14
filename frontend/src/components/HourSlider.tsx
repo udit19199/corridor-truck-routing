@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { formatHourLabel } from "./format";
+import { formatHourLabel } from "../lib/format";
 
 interface HourSliderProps {
   /** Heatmap hour 0: the departure floored to the whole hour. */
