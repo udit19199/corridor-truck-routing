@@ -1,4 +1,4 @@
-# Corridor
+# Haulcast
 
 Weather-aware truck routing: three routes scored with hourly forecasts at each checkpoint, and one recommended route.
 

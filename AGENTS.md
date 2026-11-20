@@ -1,4 +1,4 @@
-# Corridor: design and working notes
+# Haulcast: design and working notes
 
 Weather-aware truck routing: Django API (`backend/`) plus React + MapLibre UI (`frontend/`). This file is the source of truth for the risk rules, the ranking, the API contract and the module map. Read it before changing logic or the contract.
 
