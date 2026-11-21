@@ -38,20 +38,19 @@ def get_json(
 
     status = response.status_code
     if status >= 400:
-        is_route_400 = status == 400 and no_route_400 is not None
-        if is_route_400:
+        if status == 400 and no_route_400 is not None:
             try:
                 body = response.json()
             except ValueError:
                 body = None
             if no_route_400(body):
-                raise NoRouteError() from None
+                raise NoRouteError()
         log_failure(service, status, started)
-        if is_route_400:
-            raise ProviderError(f"{service} rejected the request.") from None
+        if status == 400:
+            raise ProviderError(f"{service} rejected the request.")
         if status == 429:
-            raise ProviderError(f"{service} is busy right now. Try again in a minute.") from None
-        raise ProviderError(f"{service} is unavailable right now.") from None
+            raise ProviderError(f"{service} is busy right now. Try again in a minute.")
+        raise ProviderError(f"{service} is unavailable right now.")
 
     try:
         return response.json()

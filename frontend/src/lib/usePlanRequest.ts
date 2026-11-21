@@ -11,10 +11,7 @@ type RequestState =
 const IDLE: RequestState = { status: "idle" };
 
 function errorMessage(error: unknown): string {
-  if (
-    error instanceof DOMException &&
-    (error.name === "TimeoutError" || error.name === "AbortError")
-  ) {
+  if (error instanceof DOMException && error.name === "TimeoutError") {
     return "Planning took too long. Try again.";
   }
   if (error instanceof TypeError) {

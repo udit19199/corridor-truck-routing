@@ -27,7 +27,7 @@ updates:
         patterns: ["*"]
 
   - package-ecosystem: npm
-    directories: [/frontend, /e2e]
+    directory: /frontend
     schedule:
       interval: monthly
     cooldown:

@@ -1,11 +1,12 @@
 import json
 import logging
+from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from time import monotonic
 from typing import TypeIs
 
 from django.conf import settings
-from django.core.cache import cache
+from django.core.cache import cache, caches
 from django.core.exceptions import RequestDataTooBig
 from django.http import HttpRequest, JsonResponse
 from django.views.decorators.http import require_GET, require_POST
@@ -56,9 +57,6 @@ def geocode(request: HttpRequest) -> JsonResponse:
 
 @require_POST
 def plan(request: HttpRequest) -> JsonResponse:
-    if _over_limit(request, "plan", PLAN_REQUESTS_PER_WINDOW):
-        return _too_many_requests()
-
     try:
         payload = json.loads(request.body)
     except RequestDataTooBig:
@@ -73,6 +71,8 @@ def plan(request: HttpRequest) -> JsonResponse:
         demo = _parse_demo(payload)
     except ValueError as exc:
         return _error(str(exc), 400)
+    if not demo and _over_limit(request, "plan", PLAN_REQUESTS_PER_WINDOW):
+        return _too_many_requests()
 
     started = monotonic()
     try:
@@ -173,15 +173,16 @@ def _is_number(value: object) -> TypeIs[int | float]:
 def _over_limit(request: HttpRequest, scope: str, limit: int) -> bool:
     if not settings.THROTTLE_ENABLED:
         return False
+    # The proxy appends the address it saw; earlier entries come from the client.
     forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
-    client = forwarded.split(",")[0].strip() if forwarded else request.META.get("REMOTE_ADDR", "")
-    key = f"throttle:{scope}:{client}"
-    if cache.add(key, 1, RATE_WINDOW_SECONDS):
+    client = forwarded.rsplit(",", 1)[-1].strip() or request.META.get("REMOTE_ADDR", "")
+    throttle = caches["throttle"]
+    key = f"{scope}:{client}"
+    if throttle.add(key, 1, RATE_WINDOW_SECONDS):
         return False
     try:
-        return cache.incr(key) > limit
+        return throttle.incr(key) > limit
     except ValueError:
-        cache.set(key, 1, RATE_WINDOW_SECONDS)
         return False
 
 
@@ -224,8 +225,8 @@ def _route_json(route: Route) -> dict[str, object]:
         "track": [[round(lon, 5), round(lat, 5), seconds] for lon, lat, seconds in route.track],
         "checkpoints": [_checkpoint_json(checkpoint) for checkpoint in route.checkpoints],
         "summary": {
-            "miles_by_level": [round(miles, 1) for miles in route.summary.miles_by_level],
-            "avg_risk": round(route.summary.avg_risk, 2),
+            "miles_by_level": route.summary.miles_by_level,
+            "avg_risk": route.summary.avg_risk,
             "worst": int(route.summary.worst),
         },
     }
@@ -238,12 +239,7 @@ def _checkpoint_json(checkpoint: Checkpoint) -> dict[str, object]:
         "lat": round(checkpoint.lat, 5),
         "eta": _iso(checkpoint.eta),
         "covers_mi": round(checkpoint.covers_mi, 1),
-        "weather": {
-            "wind_mph": round(checkpoint.weather.wind_mph, 1),
-            "gust_mph": round(checkpoint.weather.gust_mph, 1),
-            "rain_in_hr": round(checkpoint.weather.rain_in_hr, 2),
-            "snow_in_hr": round(checkpoint.weather.snow_in_hr, 2),
-        },
+        "weather": asdict(checkpoint.weather),
         "levels": {
             "wind": int(checkpoint.levels.wind),
             "rain": int(checkpoint.levels.rain),

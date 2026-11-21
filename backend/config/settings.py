@@ -43,7 +43,12 @@ CACHES = {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
         "LOCATION": "trips-weather",
         "OPTIONS": {"MAX_ENTRIES": 100_000},
-    }
+    },
+    # Kept apart so weather writes never evict the rate limit counters.
+    "throttle": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "throttle",
+    },
 }
 
 PROVIDER_TIMEOUT_S = 15

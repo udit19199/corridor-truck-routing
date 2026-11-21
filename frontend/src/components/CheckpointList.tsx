@@ -23,44 +23,40 @@ export default function CheckpointList({
         </span>
       </div>
 
-      {route.checkpoints.length === 0 ? (
-        <p className="section-empty">No checkpoints on this route.</p>
-      ) : (
-        <div className="cp-list">
-          {route.checkpoints.map((checkpoint) => {
-            const levelMeta = levelInfo(checkpoint.level);
-            return (
-              <button
-                key={`${checkpoint.mile}-${checkpoint.eta}`}
-                type="button"
-                className="cp-row"
-                data-testid="checkpoint-row"
-                data-level={checkpoint.level}
-                data-eta={checkpoint.eta}
-                aria-current={checkpoint.mile === focusedMile ? "true" : undefined}
-                onClick={() => onFocus(checkpoint)}
-              >
-                <span
-                  className="cp-dot"
-                  style={{ backgroundColor: levelMeta.color }}
-                  aria-hidden="true"
-                />
-                <span className="cp-mile">
-                  Mile {formatMiles(checkpoint.mile)}
+      <div className="cp-list">
+        {route.checkpoints.map((checkpoint) => {
+          const levelMeta = levelInfo(checkpoint.level);
+          return (
+            <button
+              key={`${checkpoint.mile}-${checkpoint.eta}`}
+              type="button"
+              className="cp-row"
+              data-testid="checkpoint-row"
+              data-level={checkpoint.level}
+              data-eta={checkpoint.eta}
+              aria-current={checkpoint.mile === focusedMile ? "true" : undefined}
+              onClick={() => onFocus(checkpoint)}
+            >
+              <span
+                className="cp-dot"
+                style={{ backgroundColor: levelMeta.color }}
+                aria-hidden="true"
+              />
+              <span className="cp-mile">
+                Mile {formatMiles(checkpoint.mile)}
+              </span>
+              {checkpoint.level > 0 ? (
+                <span className="cp-cause">
+                  {levelMeta.name}: {checkpoint.cause}
                 </span>
-                {checkpoint.level > 0 ? (
-                  <span className="cp-cause">
-                    {levelMeta.name}: {checkpoint.cause}
-                  </span>
-                ) : (
-                  <span className="sr-only">{levelMeta.name}</span>
-                )}
-                <span className="cp-time">{formatClock(checkpoint.eta)}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
+              ) : (
+                <span className="sr-only">{levelMeta.name}</span>
+              )}
+              <span className="cp-time">{formatClock(checkpoint.eta)}</span>
+            </button>
+          );
+        })}
+      </div>
     </section>
   );
 }

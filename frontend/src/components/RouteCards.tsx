@@ -142,17 +142,14 @@ interface RouteCardsProps {
  * no option is clean.
  */
 function noSafeRouteWarning(plan: PlanResponse): string | null {
-  const best = plan.routes.find((route) => route.id === plan.recommended_id);
-  if (best === undefined || plan.routes.length < 2) {
+  const miles = plan.routes[0]!.summary.miles_by_level;
+  const level =
+    miles[NO_TRAVEL_LEVEL] > 0 ? "No Travel" : miles[SEVERE_LEVEL] > 0 ? "Severe" : null;
+  if (level === null) {
     return null;
   }
-  if (best.summary.miles_by_level[NO_TRAVEL_LEVEL] > 0) {
-    return "Every route crosses No Travel weather. Consider a later departure.";
-  }
-  if (best.summary.miles_by_level[SEVERE_LEVEL] > 0) {
-    return "Every route crosses Severe weather. Consider a later departure.";
-  }
-  return null;
+  const routes = plan.routes.length > 1 ? "Every route crosses" : "The only route crosses";
+  return `${routes} ${level} weather. Consider a later departure.`;
 }
 
 export default function RouteCards({

@@ -99,36 +99,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function isPlace(value: unknown): value is Place {
-  return (
-    isRecord(value) &&
-    typeof value.label === "string" &&
-    typeof value.lon === "number" &&
-    typeof value.lat === "number"
-  );
-}
-
-function isPlanResponse(value: unknown): value is PlanResponse {
-  if (!isRecord(value) || !Array.isArray(value.routes) || value.routes.length === 0) {
-    return false;
-  }
-  const routesReadable = value.routes.every(
-    (route) =>
-      isRecord(route) &&
-      Array.isArray(route.track) &&
-      Array.isArray(route.checkpoints) &&
-      isRecord(route.summary) &&
-      Array.isArray(route.summary.miles_by_level),
-  );
-  return (
-    routesReadable &&
-    typeof value.recommended_id === "string" &&
-    typeof value.reason === "string" &&
-    isRecord(value.heatmap) &&
-    Array.isArray(value.heatmap.cells)
-  );
-}
-
 function isErrorPayload(payload: unknown): payload is { error: string } {
   return isRecord(payload) && typeof payload.error === "string";
 }
@@ -158,11 +128,7 @@ export async function geocode(query: string, signal?: AbortSignal): Promise<Plac
   if (!response.ok) {
     throw await errorFrom(response);
   }
-  const places = await readJson(response);
-  if (!Array.isArray(places) || !places.every(isPlace)) {
-    throw new Error(UNREADABLE);
-  }
-  return places;
+  return (await readJson(response)) as Place[];
 }
 
 export async function planTrip(body: PlanRequest, signal?: AbortSignal): Promise<PlanResponse> {
@@ -175,9 +141,5 @@ export async function planTrip(body: PlanRequest, signal?: AbortSignal): Promise
   if (!response.ok) {
     throw await errorFrom(response);
   }
-  const plan = await readJson(response);
-  if (!isPlanResponse(plan)) {
-    throw new Error(UNREADABLE);
-  }
-  return plan;
+  return (await readJson(response)) as PlanResponse;
 }

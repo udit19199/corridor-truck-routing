@@ -83,7 +83,7 @@ def _cells_near(lon: float, lat: float, cell_deg: float) -> set[Cell]:
     return cells
 
 
-def corridor_cells(tracks: list[list[TrackPoint]], cell_deg: float) -> list[Cell]:
+def corridor_cells(tracks: list[list[TrackPoint]], cell_deg: float) -> set[Cell]:
     cells: set[Cell] = set()
     for track in tracks:
         cells.update(cell_of(lon, lat, cell_deg) for lon, lat, _seconds in track)
@@ -96,4 +96,4 @@ def corridor_cells(tracks: list[list[TrackPoint]], cell_deg: float) -> list[Cell
                 lon = start[0] + (end[0] - start[0]) * fraction
                 lat = start[1] + (end[1] - start[1]) * fraction
                 cells |= _cells_near(lon, lat, cell_deg)
-    return sorted(cells, key=lambda cell: (cell[1], cell[0]))
+    return cells
