@@ -68,32 +68,29 @@ def _corridor_radius_mi(lat: float, cell_deg: float) -> float:
     return max(CORRIDOR_RADIUS_MI, hypot(height_mi, width_mi) / 2)
 
 
-def _cells_near(lon: float, lat: float, cell_deg: float) -> set[Cell]:
+def _add_cells_near(cells: set[Cell], lon: float, lat: float, cell_deg: float) -> None:
     radius_mi = _corridor_radius_mi(lat, cell_deg)
     centre_lon, centre_lat = round(lon / cell_deg), round(lat / cell_deg)
     span_lat = ceil(radius_mi / (cell_deg * MILES_PER_DEG_LAT))
     span_lon = ceil(radius_mi / (cell_deg * MILES_PER_DEG_LAT * cos(radians(lat))))
-    cells = set()
     for offset_lon in range(-span_lon, span_lon + 1):
+        cell_lon = (centre_lon + offset_lon) * cell_deg
         for offset_lat in range(-span_lat, span_lat + 1):
-            cell_lon = (centre_lon + offset_lon) * cell_deg
-            cell_lat = (centre_lat + offset_lat) * cell_deg
-            if haversine(lon, lat, cell_lon, cell_lat) <= radius_mi:
-                cells.add((cell_lon, cell_lat))
-    return cells
+            cell = (cell_lon, (centre_lat + offset_lat) * cell_deg)
+            if cell not in cells and haversine(lon, lat, *cell) <= radius_mi:
+                cells.add(cell)
 
 
 def corridor_cells(tracks: list[list[TrackPoint]], cell_deg: float) -> set[Cell]:
     cells: set[Cell] = set()
     for track in tracks:
         cells.update(cell_of(lon, lat, cell_deg) for lon, lat, _seconds in track)
-        cells |= _cells_near(track[0][0], track[0][1], cell_deg)
-        cells |= _cells_near(track[-1][0], track[-1][1], cell_deg)
+        _add_cells_near(cells, track[-1][0], track[-1][1], cell_deg)
         for start, end in zip(track, track[1:], strict=False):
             steps = max(1, ceil(haversine(start[0], start[1], end[0], end[1]) * 2))
             for step in range(steps):
                 fraction = step / steps
                 lon = start[0] + (end[0] - start[0]) * fraction
                 lat = start[1] + (end[1] - start[1]) * fraction
-                cells |= _cells_near(lon, lat, cell_deg)
+                _add_cells_near(cells, lon, lat, cell_deg)
     return cells
