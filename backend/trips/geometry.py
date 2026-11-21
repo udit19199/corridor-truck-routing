@@ -1,4 +1,5 @@
 from bisect import bisect_right
+from itertools import pairwise
 from math import asin, ceil, cos, hypot, radians, sin, sqrt
 
 from trips.domain import Cell, TrackPoint
@@ -18,11 +19,9 @@ def elapsed_seconds(driving_s: int) -> int:
 
 
 def track_with_breaks(track: list[TrackPoint]) -> list[TrackPoint]:
-    if not track:
-        return track
     elapsed_track = [(track[0][0], track[0][1], elapsed_seconds(track[0][2]))]
     boundary = MAX_DRIVING_S
-    for start, end in zip(track, track[1:], strict=False):
+    for start, end in pairwise(track):
         while boundary < end[2]:
             fraction = (boundary - start[2]) / (end[2] - start[2])
             lon = start[0] + (end[0] - start[0]) * fraction
@@ -46,7 +45,7 @@ def haversine(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
 
 def cumulative_miles(track: list[TrackPoint]) -> list[float]:
     cumulative = [0.0]
-    for previous, current in zip(track, track[1:], strict=False):
+    for previous, current in pairwise(track):
         cumulative.append(
             cumulative[-1] + haversine(previous[0], previous[1], current[0], current[1])
         )
@@ -123,7 +122,7 @@ def corridor_cells(tracks: list[list[TrackPoint]], cell_deg: float) -> set[Cell]
     for track in tracks:
         cells.update(cell_of(lon, lat, cell_deg) for lon, lat, _seconds in track)
         _add_cells_near(cells, track[-1][0], track[-1][1], cell_deg)
-        for start, end in zip(track, track[1:], strict=False):
+        for start, end in pairwise(track):
             steps = max(1, ceil(haversine(start[0], start[1], end[0], end[1]) * 2))
             for step in range(steps):
                 fraction = step / steps
