@@ -130,7 +130,7 @@ jobs:
         with:
           context: .
           load: true
-          tags: corridor:ci
+          tags: haulcast:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Smoke test
@@ -138,7 +138,7 @@ jobs:
           docker run --detach --name app --publish 8000:8000 \
             --env SECRET_KEY=ci-only --env ALLOWED_HOSTS=localhost \
             --env DEMO_DATA=true \
-            corridor:ci
+            haulcast:ci
           curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 2 \
             http://localhost:8000/api/health
           curl --fail --silent --show-error http://localhost:8000/ | grep --quiet '<div id="root">'

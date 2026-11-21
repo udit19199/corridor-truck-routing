@@ -120,7 +120,7 @@ def geocode(query: str) -> list[Place]:
         SEARCH_SERVICE,
     )
     places = []
-    for result in _parse(_Search, data, SEARCH_SERVICE).results[:5]:
+    for result in _parse(_Search, data, SEARCH_SERVICE).results:
         label = result.address.freeform_address or result.poi.name
         if result.position and label:
             places.append(Place(label=label, lon=result.position.lon, lat=result.position.lat))

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from math import floor
 
 from trips.domain import (
@@ -22,7 +22,7 @@ from trips.geometry import (
     thin_track,
 )
 from trips.providers import Providers
-from trips.remote import NoRouteError
+from trips.remote import on_hour
 from trips.rules import classify, covered_miles, rank, summarize
 
 HEATMAP_HOURS = 49
@@ -54,18 +54,16 @@ def plan_trip(request: PlanRequest, providers: Providers) -> Plan:
     options = providers.routes(
         request.origin, request.destination, request.departure, request.load_lb
     )[:3]
-    if not options:
-        raise NoRouteError()
 
-    start_hour = request.departure.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
-    latest_arrival = max(
-        request.departure + timedelta(seconds=option.duration_s) for option in options
+    start_hour = on_hour(request.departure)
+    latest_arrival = request.departure + timedelta(
+        seconds=max(option.duration_s for option in options)
     )
+    # The last hour a checkpoint can round to, or the end of the heatmap if later.
     forecast_end = max(
-        start_hour + timedelta(hours=HEATMAP_HOURS - 1), latest_arrival + timedelta(hours=1)
+        start_hour + timedelta(hours=HEATMAP_HOURS - 1),
+        on_hour(latest_arrival) + timedelta(hours=1),
     )
-    forecast_end = forecast_end.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
-    forecast_end += timedelta(hours=1)
 
     prepared_routes: list[_PreparedRoute] = []
     for index, option in enumerate(options):
@@ -177,14 +175,13 @@ def _weather_cells(
 def _cells_on_grid(
     tracks: list[list[TrackPoint]], checkpoint_points: list[TrackPoint], cell_deg: float
 ) -> list[Cell]:
-    cells = set(corridor_cells(tracks, cell_deg))
-    missing = {cell_of(lon, lat, cell_deg) for lon, lat, _seconds in checkpoint_points} - cells
-    cells |= missing
+    cells = corridor_cells(tracks, cell_deg)
+    cells |= {cell_of(lon, lat, cell_deg) for lon, lat, _seconds in checkpoint_points}
     return sorted(cells, key=lambda cell: (cell[1], cell[0]))
 
 
 def _weather_at_hour(hourly: list[Weather], index: int) -> Weather:
-    raw = hourly[min(max(index, 0), len(hourly) - 1)]
+    raw = hourly[index]
     return Weather(
         wind_mph=round(raw.wind_mph, 1),
         gust_mph=round(raw.gust_mph, 1),

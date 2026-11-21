@@ -31,8 +31,7 @@ test("plans three routes and recommends exactly one, listed first", async ({ pag
   const cards = page.getByTestId("route-card");
   await expect(cards.first()).toHaveAttribute("data-recommended", "true");
   await expect(page.locator('[data-testid="route-card"][data-recommended="false"]')).toHaveCount(2);
-  await expect(page.getByTestId("recommendation-reason")).toContainText("Safest for a 20,000 lb load.");
-  await expect(page.getByTestId("recommendation-reason")).toHaveAttribute("title", /High/);
+  await expect(page.getByTestId("recommendation-reason")).toContainText(/^Route A: .*High miles/);
   await expect(page.getByTestId("no-safe-route")).toHaveCount(0);
 });
 
@@ -46,9 +45,8 @@ test("a heavier load turns 35-44 mph wind into Severe and changes the recommenda
     .poll(() => recommendedId(page), { message: "recommendation changes with load" })
     .not.toBe(lightPick);
   await expect(page.getByTestId("recommendation-reason")).toHaveText(
-    "Safest for a 45,000 lb load. 11 min slower than the fastest.",
+    "Route B: fewer Severe miles than Route A (0 vs 75), 11 min slower; fewer High miles than Route C (150 vs 375).",
   );
-  await expect(page.getByTestId("recommendation-reason")).toHaveAttribute("title", /Severe/);
 
   await page.locator(`[data-testid="route-card"][data-route-id="${lightPick}"]`).click();
   await expect(page.locator('[data-testid="checkpoint-row"][data-level="3"]').first()).toBeVisible();
@@ -66,7 +64,7 @@ test("the storm demo plans without the form and its load toggle flips the pick",
   await expect(page.getByTestId("demo-banner")).toContainText("not live weather");
   await expect(page.getByTestId("demo-load-45000")).toHaveAttribute("aria-pressed", "true");
   const heavyPick = await recommendedId(page);
-  await expect(page.getByTestId("recommendation-reason")).toContainText("Safest for a 45,000 lb load.");
+  await expect(page.getByTestId("recommendation-reason")).toContainText("Route B: fewer Severe miles");
 
   await page.getByTestId("demo-load-20000").click();
   await expect(page.getByTestId("demo-load-20000")).toHaveAttribute("aria-pressed", "true");
@@ -128,6 +126,25 @@ test("warns when every route crosses No Travel weather, and still ranks them", a
     "Every route crosses No Travel weather. Consider a later departure.",
   );
   await expect(page.getByTestId("route-card")).toHaveCount(3);
+});
+
+test("warns when the only route crosses Severe weather", async ({ page }) => {
+  await page.route("**/api/plan", async (route) => {
+    const response = await route.fetch();
+    const plan = await response.json();
+    plan.routes = plan.routes.filter((planned: { id: string }) => planned.id === "A");
+    plan.recommended_id = "A";
+    plan.routes[0].summary.miles_by_level[3] = 75;
+    await route.fulfill({ response, json: plan });
+  });
+  await page.goto("/?debug=1");
+  await pickPlace(page, "origin-input", "Dal", "Dallas, TX");
+  await pickPlace(page, "destination-input", "Chi", "Chicago, IL");
+  await page.getByTestId("plan-submit").click();
+  await expect(page.getByTestId("route-card")).toHaveCount(1);
+  await expect(page.getByTestId("no-safe-route")).toHaveText(
+    "The only route crosses Severe weather. Consider a later departure.",
+  );
 });
 
 test("a departure in the past shows an error and keeps the form usable", async ({ page }) => {

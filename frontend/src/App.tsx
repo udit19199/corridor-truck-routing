@@ -18,7 +18,6 @@ import CheckpointList from "./components/CheckpointList";
 import { demoRequest, type DemoLoad } from "./lib/demo";
 import {
   formatClock,
-  formatDuration,
   formatLoad,
   prefersReducedMotion,
   timeZoneAbbreviation,
@@ -72,20 +71,6 @@ interface ShownPlan {
   version: number;
   /** Set when a checkpoint opens, so the map shows the hour it was scored at. */
   hourJump: { hour: number } | null;
-}
-
-/** The pick in a driver's words; the ranking numbers stay on the cards and the map. */
-function plainReason(plan: PlanResponse): string {
-  const safest = `Safest for a ${formatLoad(plan.load_lb)} load.`;
-  const picked = plan.routes.find((route) => route.id === plan.recommended_id);
-  if (picked === undefined) {
-    return safest;
-  }
-  const fastest = Math.min(...plan.routes.map((route) => route.duration_s));
-  const extraMinutes = Math.round((picked.duration_s - fastest) / 60);
-  return extraMinutes > 0
-    ? `${safest} ${formatDuration(extraMinutes * 60)} slower than the fastest.`
-    : `${safest} Also the fastest.`;
 }
 
 export default function App() {
@@ -192,7 +177,7 @@ export default function App() {
                 strokeLinecap="round"
               />
             </svg>
-            <h1>Corridor</h1>
+            <h1>Haulcast</h1>
           </div>
         </header>
 
@@ -239,12 +224,8 @@ export default function App() {
                 <p className="verdict-pick">
                   Take Route {shown.plan.recommended_id}
                 </p>
-                <p
-                  className="verdict-reason"
-                  data-testid="recommendation-reason"
-                  title={shown.plan.reason}
-                >
-                  {plainReason(shown.plan)}
+                <p className="verdict-reason" data-testid="recommendation-reason">
+                  {shown.plan.reason}
                 </p>
               </div>
               <RouteCards
