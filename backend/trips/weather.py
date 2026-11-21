@@ -33,12 +33,15 @@ def hourly(cells: list[Cell], start: datetime, end: datetime) -> dict[Cell, list
     start = on_hour(start)
     hours = max(1, int((on_hour(end) - start).total_seconds() // 3600) + 1)
 
+    times = [start + timedelta(hours=hour) for hour in range(hours)]
+    keys = {cell: [_cache_key(cell, when) for when in times] for cell in cells}
+    cached = cache.get_many([key for cell_keys in keys.values() for key in cell_keys])
+
     series: dict[Cell, list[Weather]] = {}
     missing: list[Cell] = []
-    for cell in cells:
-        cached = _cached_series(cell, start, hours)
-        if cached is not None:
-            series[cell] = cached
+    for cell, cell_keys in keys.items():
+        if all(key in cached for key in cell_keys):
+            series[cell] = [cached[key] for key in cell_keys]
         else:
             missing.append(cell)
 
@@ -46,11 +49,6 @@ def hourly(cells: list[Cell], start: datetime, end: datetime) -> dict[Cell, list
         for fetched in pool.map(lambda chunk: _fetch(chunk, start, hours), chunks(missing, 100)):
             series.update(fetched)
     return series
-
-
-def _cached_series(cell: Cell, start: datetime, hours: int) -> list[Weather] | None:
-    values = [cache.get(_cache_key(cell, start + timedelta(hours=hour))) for hour in range(hours)]
-    return None if any(value is None for value in values) else values
 
 
 def _fetch(cells: list[Cell], start: datetime, hours: int) -> dict[Cell, list[Weather]]:
@@ -93,20 +91,22 @@ def _fetch(cells: list[Cell], start: datetime, hours: int) -> dict[Cell, list[We
         if wind is None or rain is None or showers is None or snow is None or gust is None:
             raise ProviderError(f"{SERVICE} returned incomplete data.")
 
-        forecast = []
-        for hour in range(hours):
-            weather = Weather(
+        forecast = [
+            Weather(
                 wind_mph=wind[hour],
                 gust_mph=gust[hour],
                 rain_in_hr=rain[hour] + showers[hour],
                 snow_in_hr=snow[hour],
             )
-            forecast.append(weather)
-            cache.set(
-                _cache_key(cell, start + timedelta(hours=hour)),
-                weather,
-                WEATHER_CACHE_SECONDS,
-            )
+            for hour in range(hours)
+        ]
+        cache.set_many(
+            {
+                _cache_key(cell, start + timedelta(hours=hour)): weather
+                for hour, weather in enumerate(forecast)
+            },
+            WEATHER_CACHE_SECONDS,
+        )
         result[cell] = forecast
     return result
 
