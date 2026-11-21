@@ -7,6 +7,33 @@ EARTH_RADIUS_MI = 3958.7613
 CORRIDOR_RADIUS_MI = 15.0
 MILES_PER_DEG_LAT = 69.17
 MIN_TRACK_SPACING_MI = 0.2
+MAX_DRIVING_S = 11 * 3600
+REST_BREAK_S = 10 * 3600
+
+
+def elapsed_seconds(driving_s: int) -> int:
+    if driving_s <= 0:
+        return 0
+    return driving_s + REST_BREAK_S * (ceil(driving_s / MAX_DRIVING_S) - 1)
+
+
+def track_with_breaks(track: list[TrackPoint]) -> list[TrackPoint]:
+    if not track:
+        return track
+    elapsed_track = [(track[0][0], track[0][1], elapsed_seconds(track[0][2]))]
+    boundary = MAX_DRIVING_S
+    for start, end in zip(track, track[1:], strict=False):
+        while boundary < end[2]:
+            fraction = (boundary - start[2]) / (end[2] - start[2])
+            lon = start[0] + (end[0] - start[0]) * fraction
+            lat = start[1] + (end[1] - start[1]) * fraction
+            break_start = (lon, lat, elapsed_seconds(boundary))
+            if elapsed_track[-1] != break_start:
+                elapsed_track.append(break_start)
+            elapsed_track.append((lon, lat, break_start[2] + REST_BREAK_S))
+            boundary += MAX_DRIVING_S
+        elapsed_track.append((end[0], end[1], elapsed_seconds(end[2])))
+    return elapsed_track
 
 
 def haversine(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
@@ -47,12 +74,22 @@ def thin_track(track: list[TrackPoint]) -> list[TrackPoint]:
         return track
 
     cumulative = cumulative_miles(track)
+    stationary = {
+        index
+        for index in range(len(track))
+        if (index > 0 and track[index][:2] == track[index - 1][:2])
+        or (index + 1 < len(track) and track[index][:2] == track[index + 1][:2])
+    }
     kept = [0]
     for index in range(1, len(track)):
-        if cumulative[index] - cumulative[kept[-1]] >= MIN_TRACK_SPACING_MI:
+        if index in stationary or cumulative[index] - cumulative[kept[-1]] >= MIN_TRACK_SPACING_MI:
             kept.append(index)
     if kept[-1] != len(track) - 1:
-        if cumulative[-1] - cumulative[kept[-1]] < MIN_TRACK_SPACING_MI and len(kept) > 1:
+        if (
+            cumulative[-1] - cumulative[kept[-1]] < MIN_TRACK_SPACING_MI
+            and len(kept) > 1
+            and kept[-1] not in stationary
+        ):
             kept.pop()
         kept.append(len(track) - 1)
     return [track[index] for index in kept]

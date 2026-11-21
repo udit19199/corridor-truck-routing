@@ -18,8 +18,10 @@ from trips.geometry import (
     cell_of,
     corridor_cells,
     cumulative_miles,
+    elapsed_seconds,
     point_and_time_at,
     thin_track,
+    track_with_breaks,
 )
 from trips.providers import Providers
 from trips.remote import on_hour
@@ -57,7 +59,7 @@ def plan_trip(request: PlanRequest, providers: Providers) -> Plan:
 
     start_hour = on_hour(request.departure)
     latest_arrival = request.departure + timedelta(
-        seconds=max(option.duration_s for option in options)
+        seconds=max(elapsed_seconds(option.duration_s) for option in options)
     )
     # The last hour a checkpoint can round to, or the end of the heatmap if later.
     forecast_end = max(
@@ -97,7 +99,7 @@ def plan_trip(request: PlanRequest, providers: Providers) -> Plan:
         for mile, covers_mi, (lon, lat, seconds) in zip(
             prepared.checkpoint_miles, prepared.covers_mi, prepared.checkpoint_points, strict=True
         ):
-            eta = request.departure + timedelta(seconds=seconds)
+            eta = request.departure + timedelta(seconds=elapsed_seconds(seconds))
             weather = _weather_at_hour(
                 hourly_by_cell[cell_of(lon, lat, cell_deg)], forecast_index(eta, start_hour)
             )
@@ -120,9 +122,10 @@ def plan_trip(request: PlanRequest, providers: Providers) -> Plan:
                 id=prepared.route_id,
                 name=prepared.option.name,
                 distance_mi=prepared.total_mi,
-                duration_s=prepared.option.duration_s,
-                arrival=request.departure + timedelta(seconds=prepared.option.duration_s),
-                track=thin_track(prepared.option.track),
+                duration_s=elapsed_seconds(prepared.option.duration_s),
+                arrival=request.departure
+                + timedelta(seconds=elapsed_seconds(prepared.option.duration_s)),
+                track=thin_track(track_with_breaks(prepared.option.track)),
                 checkpoints=checkpoints,
                 summary=summarize(checkpoints, prepared.total_mi),
             )
