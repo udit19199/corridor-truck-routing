@@ -35,12 +35,9 @@ interface LonLat {
   lat: number;
 }
 
-function pointAt(track: TrackPoint[], seconds: number): LonLat | null {
-  const first = track[0];
-  const last = track[track.length - 1];
-  if (first === undefined || last === undefined) {
-    return null;
-  }
+function pointAt(track: TrackPoint[], seconds: number): LonLat {
+  const first = track[0]!;
+  const last = track[track.length - 1]!;
   if (seconds <= first[2]) {
     return { lon: first[0], lat: first[1] };
   }
@@ -52,22 +49,16 @@ function pointAt(track: TrackPoint[], seconds: number): LonLat | null {
   let high = track.length - 1;
   while (low < high) {
     const middle = Math.floor((low + high) / 2);
-    const point = track[middle];
-    if (point === undefined) {
-      break;
-    }
-    if (point[2] < seconds) {
+    if (track[middle]![2] < seconds) {
       low = middle + 1;
     } else {
       high = middle;
     }
   }
 
-  const after = track[low];
-  const before = track[low - 1];
-  if (after === undefined || before === undefined) {
-    return { lon: last[0], lat: last[1] };
-  }
+  // seconds is strictly inside the track, so 1 <= low < track.length.
+  const after = track[low]!;
+  const before = track[low - 1]!;
   const span = after[2] - before[2];
   const fraction = span > 0 ? (seconds - before[2]) / span : 0;
   return {
@@ -142,14 +133,10 @@ export function truckFeatures(
   const features: Feature<Point, RouteProperties>[] = [];
 
   for (const route of plan.routes) {
-    const arrival = route.track[route.track.length - 1]?.[2] ?? route.duration_s;
-    if (seconds > arrival) {
+    if (seconds > route.track[route.track.length - 1]![2]) {
       continue;
     }
     const position = pointAt(route.track, seconds);
-    if (position === null) {
-      continue;
-    }
     features.push({
       type: "Feature",
       properties: { routeId: route.id },

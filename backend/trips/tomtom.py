@@ -4,6 +4,7 @@ import os
 from bisect import bisect_right
 from collections import Counter
 from datetime import UTC, datetime, timedelta
+from itertools import pairwise
 from urllib.parse import quote
 
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -218,7 +219,7 @@ def _track(route: _Route) -> list[TrackPoint]:
         return []
 
     distance_m = [0.0]
-    for start, end in zip(points, points[1:], strict=False):
+    for start, end in pairwise(points):
         distance_m.append(distance_m[-1] + haversine(start[0], start[1], end[0], end[1]) * 1609.344)
     length = distance_m[-1]
     reported_m = route.summary.length_in_meters
