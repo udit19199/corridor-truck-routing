@@ -1,8 +1,5 @@
 .git
 .github
-brief
-docs
-e2e
 **/node_modules
 frontend/dist
 **/.venv
