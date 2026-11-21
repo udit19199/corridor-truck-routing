@@ -32,6 +32,7 @@ export interface Checkpoint {
   cause: string;
 }
 
+/** Elapsed seconds after departure, including stationary rest breaks. */
 export type TrackPoint = [lon: number, lat: number, seconds: number];
 
 export interface RouteSummary {
@@ -44,7 +45,9 @@ export interface Route {
   id: string;
   name: string;
   distance_mi: number;
+  /** Total elapsed trip time, including rest breaks. */
   duration_s: number;
+  /** UTC arrival after driving and rest breaks. */
   arrival: string;
   track: TrackPoint[];
   checkpoints: Checkpoint[];

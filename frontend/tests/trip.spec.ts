@@ -45,7 +45,7 @@ test("a heavier load turns 35-44 mph wind into Severe and changes the recommenda
     .poll(() => recommendedId(page), { message: "recommendation changes with load" })
     .not.toBe(lightPick);
   await expect(page.getByTestId("recommendation-reason")).toHaveText(
-    "Route B: fewer Severe miles than Route A (0 vs 75), 11 min slower; fewer High miles than Route C (150 vs 375).",
+    "Route B: fewer Severe miles than Route A (0 vs 75), 11 min slower; fewer High miles than Route C (175 vs 400).",
   );
 
   await page.locator(`[data-testid="route-card"][data-route-id="${lightPick}"]`).click();
@@ -195,11 +195,15 @@ test("the API rejects a demo flag that is not a boolean", async ({ request }) =>
 type ApiCheckpoint = { mile: number; lon: number; lat: number; eta: string; covers_mi: number; level: number };
 type ApiRoute = {
   id: string;
+  duration_s: number;
+  arrival: string;
+  track: [number, number, number][];
   distance_mi: number;
   checkpoints: ApiCheckpoint[];
   summary: { miles_by_level: number[] };
 };
 type ApiPlan = {
+  departure: string;
   recommended_id: string;
   reason: string;
   routes: ApiRoute[];
@@ -225,6 +229,30 @@ async function planViaApi(request: APIRequestContext, loadLb: number, intervalMi
 const SEVERE = 3;
 const HIGH = 2;
 
+test("demo ETAs and truck tracks include an hours-of-service rest break", async ({ request }) => {
+  const plan = await planViaApi(request, 20000);
+  const drivingSeconds: Record<string, number> = { A: 61476, B: 62138, C: 68334 };
+  for (const route of plan.routes) {
+    expect(route.duration_s).toBe(drivingSeconds[route.id] + 10 * 3600);
+    expect(route.duration_s).toBeGreaterThanOrEqual(21 * 3600);
+    expect((Date.parse(route.arrival) - Date.parse(plan.departure)) / 1000).toBe(route.duration_s);
+    const etas = route.checkpoints.map((checkpoint) => Date.parse(checkpoint.eta));
+    expect(etas[0]).toBe(Date.parse(plan.departure));
+    expect(etas.at(-1)).toBe(Date.parse(route.arrival));
+    expect(etas.some((eta, index) => index > 0 && eta - etas[index - 1] >= 10 * 3600_000)).toBe(true);
+    const breaks = route.track.filter((point, index) => {
+      const previous = route.track[index - 1];
+      return previous && point[0] === previous[0] && point[1] === previous[1]
+        && point[2] - previous[2] === 10 * 3600;
+    });
+    expect(breaks).toHaveLength(1);
+    expect(breaks[0][2]).toBe(21 * 3600);
+    expect(route.track[0][2]).toBe(0);
+    expect(route.track.at(-1)![2]).toBe(route.duration_s);
+    expect(route.track.every((point, index) => index === 0 || point[2] >= route.track[index - 1][2])).toBe(true);
+  }
+});
+
 test("the load rule flips exactly above 40,000 lb", async ({ request }) => {
   const atLimit = await planViaApi(request, 40000);
   const overLimit = await planViaApi(request, 40001);
@@ -238,7 +266,7 @@ test("the load rule flips exactly above 40,000 lb", async ({ request }) => {
   expect(overLimit.recommended_id).toBe("B");
   expect(routeA(overLimit).summary.miles_by_level[SEVERE]).toBe(75);
   expect(overLimit.reason).toBe(
-    "Route B: fewer Severe miles than Route A (0 vs 75), 11 min slower; fewer High miles than Route C (150 vs 375).",
+    "Route B: fewer Severe miles than Route A (0 vs 75), 11 min slower; fewer High miles than Route C (175 vs 400).",
   );
 });
 

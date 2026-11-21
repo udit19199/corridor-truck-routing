@@ -8,7 +8,7 @@ A driver enters an origin, a destination, a departure time and a cargo weight. T
 
 The driver is the user: on a phone, with little time. The verdict and its reason come first; the per-checkpoint numbers are there for anyone who wants to check them. A dispatcher can use the same screen.
 
-Out of scope for this version: accounts, saved trips and history, live re-routing while a truck is moving, and driver hours of service. The last one is the biggest accuracy gap and is covered in section 6.
+Out of scope for this version: accounts, saved trips and history, live re-routing while a truck is moving, and driver-entered planned stops.
 
 ## 2. Rules
 
@@ -46,12 +46,12 @@ The ranking starts at Severe; No Travel is worse, so it goes first. Miles are ro
 
 The reason compares the winner with each other route on the first key where it wins, lists the most decisive comparison first, and states the time cost when the safer route is slower. If the winner still has Severe or No Travel miles, it says so. At 45,000 lb in the demo:
 
-> Route B: fewer Severe miles than Route A (0 vs 75), 11 min slower; fewer High miles than Route C (150 vs 375).
+> Route B: fewer Severe miles than Route A (0 vs 75), 11 min slower; fewer High miles than Route C (175 vs 400).
 
 ## 3. Pipeline
 
 1. TomTom truck routing, three routes, vehicle weight = cargo + 35,000 lb tare, `traffic=false` (live traffic made TomTom drop alternatives; historical speeds still shape ETAs).
-2. Cumulative miles along each track; checkpoints at the chosen interval plus the destination; ETA interpolated from TomTom's travel times.
+2. Cumulative miles along each track; checkpoints at the chosen interval plus the destination; driving time interpolated from TomTom's travel times, then a 10-hour break after each 11 hours of driving. A point reached at exactly 11 hours is before the break. Track positions stay still during breaks.
 3. Weather cells within 15 miles of any track, plus any checkpoint cell. The grid is 0.25°, moved to 0.5° or 1° only when 0.25° would exceed 250 cells.
 4. Open-Meteo hourly forecast for the needed hours, batched 100 cells per request, up to four requests in parallel, cached per cell and hour for 30 minutes.
 5. Classify every checkpoint, summarise the route by level, rank, and write the reason.
@@ -90,8 +90,9 @@ interface PlanResponse {
 }
 
 interface Route {
-  id: string; name: string; distance_mi: number; duration_s: number; arrival: string;
-  track: [number, number, number][];    // [lon, lat, seconds after departure]
+  id: string; name: string; distance_mi: number;
+  duration_s: number; arrival: string; // total elapsed trip time and UTC arrival, including breaks
+  track: [number, number, number][];    // [lon, lat, elapsed seconds after departure], stationary during breaks
   checkpoints: Checkpoint[];
   summary: { miles_by_level: [number, number, number, number, number]; avg_risk: number; worst: Level };
 }
@@ -122,7 +123,7 @@ interface Heatmap {
 
 ## 6. Limits and next
 
-Hours of service is the biggest gap. ETAs are pure driving time, so on a 17 hour run the last few hundred miles are scored about 10 hours too early: US rules allow 11 hours of driving, then a 10 hour break. The fix is to apply that rule to the ETAs by default, then let the driver enter planned stops.
+ETAs apply the default US hours-of-service rule: after 11 hours of driving, a 10-hour break, repeating. Checkpoint weather, arrival, total trip time and the truck track all include these breaks; arrival exactly at a driving boundary needs no further break. Driver-entered planned stops remain next.
 
 After that: times in the route's own time zone, scoring gusts for empty trailers, moving the cache to Redis, and a paid instance so the app never sleeps.
 
