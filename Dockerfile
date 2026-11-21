@@ -5,7 +5,7 @@ RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
 RUN npm run build
 
-FROM python:3.13-slim AS deps
+FROM python:3.15-slim AS deps
 COPY --from=ghcr.io/astral-sh/uv:0.13.3 /uv /usr/local/bin/uv
 ENV UV_PROJECT_ENVIRONMENT=/venv \
     UV_COMPILE_BYTECODE=1 \
@@ -14,7 +14,7 @@ WORKDIR /app/backend
 COPY backend/pyproject.toml backend/uv.lock ./
 RUN uv sync --frozen --no-dev --no-cache
 
-FROM python:3.13-slim
+FROM python:3.15-slim
 ENV PATH=/venv/bin:$PATH \
     PYTHONUNBUFFERED=1
 WORKDIR /app/backend
