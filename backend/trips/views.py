@@ -6,7 +6,7 @@ from time import monotonic
 from typing import TypeIs
 
 from django.conf import settings
-from django.core.cache import cache, caches
+from django.core.cache import caches
 from django.core.exceptions import RequestDataTooBig
 from django.http import HttpRequest, JsonResponse
 from django.views.decorators.http import require_GET, require_POST
@@ -39,13 +39,13 @@ def geocode(request: HttpRequest) -> JsonResponse:
         return _too_many_requests()
 
     cache_key = f"geocode:{query.lower()}"
-    places = cache.get(cache_key)
+    places = caches["geocode"].get(cache_key)
     if places is None:
         try:
             places = get_providers().geocode(query)
         except ProviderError as exc:
             return _error(str(exc), 502)
-        cache.set(cache_key, places, GEOCODE_CACHE_SECONDS)
+        caches["geocode"].set(cache_key, places, GEOCODE_CACHE_SECONDS)
     return JsonResponse(
         [
             {"label": place.label, "lon": round(place.lon, 5), "lat": round(place.lat, 5)}

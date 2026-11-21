@@ -44,7 +44,11 @@ CACHES = {
         "LOCATION": "trips-weather",
         "OPTIONS": {"MAX_ENTRIES": 100_000},
     },
-    # Kept apart so weather writes never evict the rate limit counters.
+    # Kept apart so weather writes never evict geocode results or rate limit counters.
+    "geocode": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "geocode",
+    },
     "throttle": {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
         "LOCATION": "throttle",
