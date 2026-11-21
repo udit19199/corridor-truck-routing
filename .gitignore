@@ -32,6 +32,3 @@ htmlcov/
 .vscode/
 *.swp
 *.log
-
-# Assignment brief, kept local
-brief/

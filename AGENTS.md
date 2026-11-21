@@ -117,7 +117,7 @@ interface Heatmap {
 - **One request per plan.** The response carries all 49 heatmap hours. A slider move sets one feature state per cell and replaces a three-point truck source; it never rebuilds the GeoJSON or touches the style. With a 4x CPU throttle the p95 frame time was 32.6 ms, with no source reload.
 - **No database.** A plan is computed fresh. One Gunicorn worker owns the in-memory weather and geocode cache; threads carry the I/O. Redis is the first step past one instance.
 - **Adaptive cells.** Open-Meteo's 600 locations per minute is the binding limit. Cells stay at 0.25° where that fits, grow on long trips, and live plans throttle to six a minute per client (demo plans call no provider, so they skip it).
-- **Demo data.** Recorded Dallas to Chicago routes and a scripted storm make the Playwright suite repeatable without keys, and let a reviewer see the load rule change the pick on a calm day. The UI labels it as not live weather.
+- **Demo data.** Recorded Dallas to Chicago routes and a scripted storm make the Playwright suite repeatable without keys, and show the load rule change the pick on a calm day. The UI labels it as not live weather.
 - **Keys and errors stay on the server.** `TOMTOM_API_KEY` never reaches the browser, logs or tracebacks. Provider failures are logged as service, status and elapsed time, then mapped to 502 with a plain sentence. Input is validated before any provider call.
 - **Failure behaviour.** A replan that fails leaves the previous results with a banner. A map that cannot load leaves the routes and checkpoints in the panel. A provider that returns unreadable data is a 502, not a crash.
 
