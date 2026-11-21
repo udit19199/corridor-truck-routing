@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { MAP_STYLE } from "../src/map/basemap";
 
 async function pickPlace(page: Page, testId: string, typed: string, label: string) {
   await page.getByTestId(testId).fill(typed);
@@ -145,6 +146,59 @@ test("warns when the only route crosses Severe weather", async ({ page }) => {
   await expect(page.getByTestId("no-safe-route")).toHaveText(
     "The only route crosses Severe weather. Consider a later departure.",
   );
+});
+
+test("a 429 on replan leaves the previous results visible", async ({ page }) => {
+  await planTrip(page, 20000);
+  const summary = page.getByTestId("plan-summary");
+  const reason = page.getByTestId("recommendation-reason");
+  await expect(summary).toContainText("20,000 lb");
+  const previousReason = await reason.innerText();
+
+  const message = "Too many requests. Wait a minute and try again.";
+  await page.route(
+    "**/api/plan",
+    (route) =>
+      route.fulfill({ status: 429, headers: { "Retry-After": "60" }, json: { error: message } }),
+    { times: 1 },
+  );
+  await page.getByTestId("load-input").fill("45000");
+  await page.getByTestId("plan-submit").click();
+
+  const banner = page.getByTestId("error-banner");
+  await expect(banner).toBeVisible();
+  await expect(banner).toContainText(message);
+  await expect(banner).toContainText("The results below are from the previous plan.");
+  await expect(summary).toContainText("20,000 lb");
+  await expect(reason).toBeVisible();
+  await expect(reason).toHaveText(previousReason);
+  await expect(page.getByTestId("route-card")).toHaveCount(3);
+  await expect(page.getByTestId("checkpoint-row").first()).toBeVisible();
+});
+
+test("the routes panel stays usable when the basemap fails to load", async ({ page }) => {
+  await page.route(MAP_STYLE, (route) =>
+    route.fulfill({ status: 503, headers: { "Access-Control-Allow-Origin": "*" } }),
+  );
+  await page.goto("/");
+  const fallback = page.getByRole("alert").filter({ hasText: "The basemap could not be reached." });
+  await expect(fallback).toBeVisible();
+
+  await page.getByTestId("demo-start").click();
+  const cards = page.getByTestId("route-card");
+  await expect(cards).toHaveCount(3);
+  const alternate = cards.nth(1);
+  const alternateId = await alternate.getAttribute("data-route-id");
+  await expect(alternate).toHaveAttribute("aria-pressed", "false");
+  await alternate.click();
+  await expect(alternate).toHaveAttribute("aria-pressed", "true");
+
+  const checkpoints = page.getByRole("region", { name: "Checkpoints" });
+  await expect(checkpoints.getByText(`Route ${alternateId}`, { exact: true })).toBeVisible();
+  const checkpoint = checkpoints.getByTestId("checkpoint-row").first();
+  await checkpoint.click();
+  await expect(checkpoint).toHaveAttribute("aria-current", "true");
+  await expect(fallback).toBeVisible();
 });
 
 test("a departure in the past shows an error and keeps the form usable", async ({ page }) => {
